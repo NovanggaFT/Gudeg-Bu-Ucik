@@ -1,31 +1,104 @@
 // app/data/salesData.ts
 
-export const salesData = {
-  // Data harga
+import type { SalesData } from '@/app/types';
+
+export const salesData: SalesData = {
   hppPerPorsi: 13000,
   hargaJualPerPorsi: 15000,
   labaPerPorsi: 2000,
   targetHarian: 200,
+  stokAwal: 500,
+  thresholdBelanja: 200,
   
-  // Realisasi penjualan
   realisasiHarian: [
-    { hari: 1, terjual: 200, sisa: 0 },
-    { hari: 2, terjual: 130, sisa: 70 },
-    { hari: 3, terjual: 130, sisa: 0 },
-    { hari: 4, terjual: 200, sisa: 0 },
-    { hari: 5, terjual: 200, sisa: 30 },
-    { hari: 6, terjual: 170, sisa: 30 },
-    { hari: 7, terjual: 170, sisa: 0 },
+    { 
+      tanggal: '2026-06-17', 
+      hari: 1,
+      terjual: 200, 
+      sisa: 300,
+      stokAwal: 500,
+      status: 'sisa banyak',
+      perluBelanja: false,
+      belanja: 0
+    },
+    { 
+      tanggal: '2026-06-18', 
+      hari: 2,
+      terjual: 130, 
+      sisa: 170,
+      stokAwal: 300,
+      status: 'sisa banyak',
+      perluBelanja: false,
+      belanja: 0
+    },
+    { 
+      tanggal: '2026-06-19', 
+      hari: 3,
+      terjual: 130, 
+      sisa: 40,
+      stokAwal: 170,
+      status: 'sisa sedikit',
+      perluBelanja: true,
+      belanja: 0
+    },
+    { 
+      tanggal: '2026-06-20', 
+      hari: 4,
+      terjual: 200, 
+      sisa: 140,
+      stokAwal: 340,        // 40 + 300 belanja
+      status: 'sisa banyak',
+      perluBelanja: false,
+      belanja: 300
+    },
+    { 
+      tanggal: '2026-06-21', 
+      hari: 5,
+      terjual: 140,         // ← 140 (stok habis)
+      sisa: 0,
+      stokAwal: 140,
+      status: 'habis',
+      perluBelanja: true,
+      belanja: 0
+    },
+    { 
+      tanggal: '2026-06-22', 
+      hari: 6,
+      terjual: 0,           // ← 0 (stok habis, ga bisa jual)
+      sisa: 0,
+      stokAwal: 0,          // ← 0 (sisa dari kemarin 0)
+      status: 'habis',
+      perluBelanja: true,
+      belanja: 0
+    },
+    { 
+      tanggal: '2026-06-23', 
+      hari: 7,
+      terjual: 0,           // ← 0 (stok habis, ga bisa jual)
+      sisa: 0,
+      stokAwal: 0,          // ← 0 (sisa dari kemarin 0)
+      status: 'habis',
+      perluBelanja: true,
+      belanja: 0
+    },
+  ],
+  
+  riwayatBelanja: [
+    {
+      tanggal: '2026-06-20',
+      jumlah: 300,
+      keterangan: 'Belanja stok karena sisa 40'
+    }
   ],
 };
 
+// ✅ EXPORT calculateMetrics
 export const calculateMetrics = (data: typeof salesData) => {
   const totalTerjual = data.realisasiHarian.reduce((sum, h) => sum + h.terjual, 0);
   const totalSisa = data.realisasiHarian.reduce((sum, h) => sum + h.sisa, 0);
   const totalBelanja = data.targetHarian * 7;
   const sisaBahanBaku = totalBelanja - totalTerjual;
   
-  // Hitung total kerugian potensial dari sisa stok
   const totalPotensiHilang = totalSisa * data.hargaJualPerPorsi;
   const totalModalTerbuang = totalSisa * data.hppPerPorsi;
   
@@ -40,7 +113,7 @@ export const calculateMetrics = (data: typeof salesData) => {
     persentaseEfisiensi: (totalTerjual / (data.targetHarian * 7)) * 100,
     totalPendapatan: totalTerjual * data.hargaJualPerPorsi,
     totalHPP: totalTerjual * data.hppPerPorsi,
-    totalPotensiHilang,      // Pendapatan yang hilang karena sisa
-    totalModalTerbuang,      // Modal yang terbuang karena sisa
+    totalPotensiHilang,
+    totalModalTerbuang,
   };
 };

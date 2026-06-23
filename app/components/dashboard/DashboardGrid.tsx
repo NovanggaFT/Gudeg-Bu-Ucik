@@ -1,7 +1,7 @@
 // app/components/dashboard/DashboardGrid.tsx
 
 import StatCard from "./StatCard";
-import { salesData, calculateMetrics } from "@/app/data/salesData";
+import { calculateMetrics } from "@/app/data/salesData";  // ✅ IMPORT calculateMetrics
 
 const formatRupiah = (angka: number) => {
   return new Intl.NumberFormat("id-ID", {
@@ -11,10 +11,14 @@ const formatRupiah = (angka: number) => {
   }).format(angka);
 };
 
-export default function DashboardGrid() {
-  const metrics = calculateMetrics(salesData);
+interface DashboardGridProps {
+  metrics: ReturnType<typeof calculateMetrics>;
+  onOpenForm: () => void;
+  onOpenBelanja: () => void;  // ← TAMBAHKAN INI
+}
+
+export default function DashboardGrid({ metrics, onOpenForm, onOpenBelanja }: DashboardGridProps) {
   
-  // Data card dengan warna masing-masing
   const cards = [
     {
       id: 1,
@@ -67,18 +71,42 @@ export default function DashboardGrid() {
   ];
 
   return (
-    // Grid 2x2 untuk desktop, 1 kolom untuk mobile
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-4xl mx-auto">
-      {cards.map((card) => (
-        <StatCard
-          key={card.id}
-          title={card.title}
-          value={card.value}
-          subtitle={card.subtitle}
-          icon={card.icon}
-          color={card.color}
-        />
-      ))}
+    <div>
+      {/* Grid 2x2 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-4xl mx-auto">
+        {cards.map((card) => (
+          <StatCard
+            key={card.id}
+            title={card.title}
+            value={card.value}
+            subtitle={card.subtitle}
+            icon={card.icon}
+            color={card.color}
+          />
+        ))}
+      </div>
+      
+      {/* Tombol Actions */}
+      <div className="flex justify-center gap-3 mt-8">
+        <button
+          onClick={onOpenForm}
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-xl transition-all duration-200 shadow-sm hover:shadow-md font-medium text-sm"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          Input Penjualan
+        </button>
+        <button
+          onClick={onOpenBelanja}
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-xl transition-all duration-200 shadow-sm hover:shadow-md font-medium text-sm"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+          </svg>
+          Belanja Stok
+        </button>
+      </div>
     </div>
   );
 }

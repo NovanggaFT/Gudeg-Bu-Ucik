@@ -1,28 +1,41 @@
-// app/components/ui/Button.tsx
+/**
+ * ========================================
+ * BUTTON COMPONENT
+ * ========================================
+ * Reusable button dengan variasi style
+ * 
+ * PROPS:
+ * - onClick: Function handler
+ * - isOpen: Boolean untuk toggle state
+ * - children: Optional custom label
+ */
 
-interface ButtonProps {
-  onClick: () => void;
-  isOpen: boolean;
-  children?: React.ReactNode;
-}
+'use client';
 
-export default function Button({ onClick, isOpen }: ButtonProps) {
+import type { ButtonProps } from '@/app/types';
+
+export default function Button({ 
+  onClick, 
+  isOpen, 
+  children 
+}: ButtonProps) {
   return (
     <button
       onClick={onClick}
-      className="group mt-8 px-6 py-2.5 bg-transparent hover:bg-gray-50 text-gray-500 hover:text-gray-700 rounded-full transition-all duration-300 text-sm font-medium"
+      className={`
+        px-6 py-2 rounded-full text-sm font-medium
+        transition-all duration-300 ease-in-out
+        hover:scale-105 active:scale-95
+        focus:outline-none focus:ring-2 focus:ring-blue-400
+        ${isOpen 
+          ? 'bg-gray-200 text-gray-600 hover:bg-gray-300' 
+          : 'bg-blue-500 text-white hover:bg-blue-600'
+        }
+      `}
+      aria-expanded={isOpen}
+      aria-label={isOpen ? 'Sembunyikan tabel' : 'Tampilkan tabel'}
     >
-      <span className="flex items-center gap-2">
-        {isOpen ? "READ LESS" : "READ MORE"}
-        <svg 
-          className={`w-4 h-4 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} 
-          fill="none" 
-          stroke="currentColor" 
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 9l-7 7-7-7" />
-        </svg>
-      </span>
+      {children || (isOpen ? 'Show Less' : 'Read More')}
     </button>
   );
 }
