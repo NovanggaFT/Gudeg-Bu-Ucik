@@ -1,14 +1,12 @@
 // app/page.tsx
+
 'use client';
 
 import { useState, useEffect } from 'react';
 import DashboardGrid from '@/app/components/dashboard/DashboardGrid';
-import SalesTable from '@/app/components/dashboard/SalesTable';
-import SalesForm from '@/app/components/form/SalesForm';
-import BelanjaForm from '@/app/components/form/BelanjaForm';
-import Button from '@/app/components/ui/Button';
+import PenjualanForm from '@/app/components/form/PenjualanForm';
+import PembelianForm from '@/app/components/form/PembelianForm';
 
-// Type untuk data dari API
 interface SalesData {
   id: string;
   hppPerPorsi: number;
@@ -20,19 +18,19 @@ interface SalesData {
   realisasi: Array<{
     id: string;
     tanggal: string;
-    hari: number;
     terjual: number;
     sisa: number;
     stokAwal: number;
     status: string;
     perluBelanja: boolean;
-    belanja: number;
   }>;
   riwayatBelanja: Array<{
     id: string;
     tanggal: string;
     jumlah: number;
-    keterangan: string;
+    total: number | null;
+    totalSystem: number | null;
+    keterangan: string | null;
   }>;
 }
 
@@ -43,28 +41,64 @@ export default function Home() {
   const [showTable, setShowTable] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isBelanjaOpen, setIsBelanjaOpen] = useState(false);
+  const [currentWeek, setCurrentWeek] = useState(0);
+  const [filteredData, setFilteredData] = useState<any[]>([]);
 
   // Fetch data dari database
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const res = await fetch('/api/sales');
-        const result = await res.json();
-        
-        if (result.status === '✅ Berhasil!') {
-          setSalesData(result.data);
-        } else {
-          setError('Gagal mengambil data');
-        }
-      } catch (err) {
-        setError('Error fetching data');
-      } finally {
-        setLoading(false);
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch('/api/penjualan');
+      const result = await res.json();
+      
+      if (result.status === '✅ Berhasil!') {
+        setSalesData(result.data);
+        // Set filtered data awal
+        const tableData = result.data.realisasi.map((r: any) => ({
+          id: r.id,
+          tanggal: r.tanggal,
+          hariNama: new Date(r.tanggal).toLocaleDateString('id-ID', { weekday: 'long' }),
+          terjual: r.terjual,
+          sisa: r.sisa,
+          stokAwal: r.stokAwal,
+          status: r.status,
+          perluBelanja: r.perluBelanja,
+        }));
+        setFilteredData(tableData);
+      } else {
+        setError('Gagal mengambil data');
       }
-    };
+    } catch (err) {
+      setError('Error fetching data');
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchData();
   }, []);
+
+  // Filter handler
+  const handleFilterChange = (startDate: string, endDate: string) => {
+    if (!salesData) return;
+    
+    const filtered = salesData.realisasi.filter((item) => {
+      const date = item.tanggal.split('T')[0];
+      return date >= startDate && date <= endDate;
+    });
+
+    setFilteredData(filtered.map((r) => ({
+      id: r.id,
+      tanggal: r.tanggal,
+      hariNama: new Date(r.tanggal).toLocaleDateString('id-ID', { weekday: 'long' }),
+      terjual: r.terjual,
+      sisa: r.sisa,
+      stokAwal: r.stokAwal,
+      status: r.status,
+      perluBelanja: r.perluBelanja,
+    })));
+  };
 
   if (loading) {
     return (
@@ -87,23 +121,31 @@ export default function Home() {
     );
   }
 
-  // Hitung metrics dari data
-  const totalTerjual = salesData.realisasi.reduce((sum, h) => sum + h.terjual, 0);
+  // Hitung metrics dari data (berdasarkan filtered data)
+  const totalTerjual = filteredData.reduce((sum, h) => sum + h.terjual, 0);
+  const totalSisa = filteredData.length > 0 ? filteredData[filteredData.length - 1]?.sisa || 0 : 0;
+  
+  // Hitung total belanja
+  const totalBelanja = salesData.riwayatBelanja.reduce((sum, b) => {
+    const jumlah = b.jumlah || b.totalSystem || 0;
+    return sum + jumlah;
+  }, 0);
+  
   const totalPendapatan = totalTerjual * salesData.hargaJualPerPorsi;
   const totalHPP = totalTerjual * salesData.hppPerPorsi;
   const totalProfit = totalTerjual * salesData.labaPerPorsi;
-  const totalSisa = salesData.realisasi[salesData.realisasi.length - 1]?.sisa || 0;
   const totalPotensiHilang = totalSisa * salesData.hargaJualPerPorsi;
-  const totalBelanja = salesData.riwayatBelanja.reduce((sum, b) => sum + b.jumlah, 0);
-  const persentaseEfisiensi = (totalTerjual / (salesData.targetHarian * salesData.realisasi.length)) * 100;
+  const persentaseEfisiensi = filteredData.length > 0 
+    ? (totalTerjual / (salesData.targetHarian * filteredData.length)) * 100 
+    : 0;
 
   const metrics = {
     totalTerjual,
     totalSisa,
     sisaBahanBaku: (salesData.stokAwal + totalBelanja) - totalTerjual,
     nilaiAset: ((salesData.stokAwal + totalBelanja) - totalTerjual) * salesData.hppPerPorsi,
-    penjualanHariIni: salesData.realisasi[salesData.realisasi.length - 1]?.terjual || 0,
-    nilaiPenjualanHariIni: (salesData.realisasi[salesData.realisasi.length - 1]?.terjual || 0) * salesData.hargaJualPerPorsi,
+    penjualanHariIni: filteredData.length > 0 ? filteredData[filteredData.length - 1]?.terjual || 0 : 0,
+    nilaiPenjualanHariIni: (filteredData.length > 0 ? filteredData[filteredData.length - 1]?.terjual || 0 : 0) * salesData.hargaJualPerPorsi,
     totalProfit,
     persentaseEfisiensi,
     totalPendapatan,
@@ -115,40 +157,15 @@ export default function Home() {
     totalBelanja,
   };
 
-  const dashboardConfig = {
-    title: 'DASHBOARD',
-    subtitle: 'manajemen penjualan & stok',
-    footer: 'data statis · periode mingguan'
-  };
-
-  // Convert data untuk SalesTable
-  const salesDataForTable = {
-    hppPerPorsi: salesData.hppPerPorsi,
-    hargaJualPerPorsi: salesData.hargaJualPerPorsi,
-    labaPerPorsi: salesData.labaPerPorsi,
-    targetHarian: salesData.targetHarian,
-    realisasiHarian: salesData.realisasi.map(r => ({
-      hari: r.hari,
-      terjual: r.terjual,
-      sisa: r.sisa,
-      tanggal: new Date(r.tanggal).toISOString().split('T')[0],
-      stokAwal: r.stokAwal,
-      status: r.status,
-      perluBelanja: r.perluBelanja,
-      belanja: r.belanja,
-    })),
-    riwayatBelanja: salesData.riwayatBelanja,
-  };
-
   return (
     <main className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
       <header className="pt-12 pb-4 text-center border-b border-gray-100">
         <h1 className="text-xl font-bold text-gray-700 tracking-wide">
-          {dashboardConfig.title}
+          DASHBOARD
         </h1>
         <p className="text-sm text-gray-400 mt-0.5">
-          {dashboardConfig.subtitle}
+          manajemen penjualan & stok
         </p>
         {metrics.perluBelanja && (
           <div className="mt-3 px-4 py-2 bg-yellow-50 border border-yellow-200 text-yellow-700 text-sm rounded-lg inline-block">
@@ -158,60 +175,83 @@ export default function Home() {
       </header>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
+      <div className="flex-1 flex flex-col items-center px-4 py-8">
         <div className="w-full max-w-4xl">
           <DashboardGrid
             metrics={metrics}
             onOpenForm={() => setIsFormOpen(true)}
             onOpenBelanja={() => setIsBelanjaOpen(true)}
+            showTable={showTable}
+            onToggleTable={() => setShowTable(!showTable)}
+            tableData={filteredData}
+            targetHarian={salesData.targetHarian}
+            hppPerPorsi={salesData.hppPerPorsi}
+            hargaJualPerPorsi={salesData.hargaJualPerPorsi}
+            labaPerPorsi={salesData.labaPerPorsi}
+            currentWeek={currentWeek}
+            onWeekChange={setCurrentWeek}
+            onFilterChange={handleFilterChange}
           />
-
-          <div className="flex justify-center mt-6">
-            <Button
-              onClick={() => setShowTable(!showTable)}
-              isOpen={showTable}
-            />
-          </div>
-
-          <div
-            className={`
-              transition-all duration-500 overflow-hidden
-              ${showTable ? 'max-h-[600px] opacity-100 mt-8' : 'max-h-0 opacity-0'}
-            `}
-            aria-hidden={!showTable}
-          >
-            <SalesTable salesData={salesDataForTable} />
-          </div>
         </div>
       </div>
 
       {/* Footer */}
       <footer className="py-8 text-center text-xs text-gray-300">
-        {dashboardConfig.footer}
+        data real-time · periode mingguan
       </footer>
 
-      <SalesForm
+      {/* Form Penjualan */}
+      <PenjualanForm
         isOpen={isFormOpen}
         onClose={() => setIsFormOpen(false)}
-        onSubmit={(value) => {
-          // TODO: Implement update ke database
-          console.log('Update penjualan:', value);
-          setIsFormOpen(false);
+        onSubmit={async (data) => {
+          try {
+            const res = await fetch('/api/penjualan', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(data),
+            });
+            const result = await res.json();
+            if (result.status === '✅ Berhasil!') {
+              setIsFormOpen(false);
+              await fetchData(); // Refresh data
+              alert('Penjualan berhasil disimpan!');
+            } else {
+              alert(result.error || 'Gagal menyimpan data');
+            }
+          } catch (error) {
+            alert('Terjadi kesalahan');
+          }
         }}
         targetHarian={salesData.targetHarian}
-        hariKe={salesData.realisasi.length}
-        tanggal={new Date().toISOString().split('T')[0]}
+        loading={false}
       />
 
-      <BelanjaForm
+      {/* Form Pembelian */}
+      <PembelianForm
         isOpen={isBelanjaOpen}
         onClose={() => setIsBelanjaOpen(false)}
-        onSubmit={(jumlah, keterangan) => {
-          // TODO: Implement belanja ke database
-          console.log('Belanja:', jumlah, keterangan);
-          setIsBelanjaOpen(false);
+        onSubmit={async (data) => {
+          try {
+            const res = await fetch('/api/pembelian', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(data),
+            });
+            const result = await res.json();
+            if (result.status === '✅ Berhasil!') {
+              setIsBelanjaOpen(false);
+              await fetchData(); // Refresh data
+              alert('Pembelian berhasil disimpan!');
+            } else {
+              alert(result.error || 'Gagal menyimpan data');
+            }
+          } catch (error) {
+            alert('Terjadi kesalahan');
+          }
         }}
-        stokSaatIni={metrics.stokSaatIni}
+        hppPerPorsi={salesData.hppPerPorsi}
+        loading={false}
       />
     </main>
   );

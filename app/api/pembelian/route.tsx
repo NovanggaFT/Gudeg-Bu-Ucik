@@ -2,51 +2,46 @@
 
 import { prisma } from '@/app/lib/prisma';
 import { NextResponse } from 'next/server';
-import { Prisma } from '@prisma/client';
 
 function calculateBelanja(data: {
-  jumlah?: number
-  total?: number
-  hppPerPorsi: number
+  jumlah?: number;
+  total?: number;
+  hppPerPorsi: number;
 }) {
-  const { jumlah, total, hppPerPorsi } = data
-  
-  // Validasi: minimal salah satu diisi
+  const { jumlah, total, hppPerPorsi } = data;
+
   if (!jumlah && !total) {
-    throw new Error('Isi salah satu: Jumlah atau Total')
+    throw new Error('Isi salah satu: Jumlah atau Total');
   }
-  
-  // Skenario 1: User isi jumlah saja
+
   if (jumlah && !total) {
     return {
       jumlah,
       total: null,
       jumlahSystem: null,
       totalSystem: jumlah * hppPerPorsi,
-    }
+    };
   }
-  
-  // Skenario 2: User isi total saja
+
   if (total && !jumlah) {
     return {
       jumlah: null,
       total,
       jumlahSystem: Math.floor(total / hppPerPorsi),
       totalSystem: null,
-    }
+    };
   }
-  
-  // Skenario 3: User isi keduanya
+
   if (jumlah && total) {
     return {
       jumlah,
       total,
       jumlahSystem: null,
       totalSystem: null,
-    }
+    };
   }
-  
-  return null
+
+  return null;
 }
 
 // GET: Ambil semua data pembelian
@@ -59,9 +54,9 @@ export async function GET() {
           select: {
             hppPerPorsi: true,
             hargaJualPerPorsi: true,
-          }
-        }
-      }
+          },
+        },
+      },
     });
 
     return NextResponse.json({
@@ -84,7 +79,6 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { tanggal, jumlah, total, keterangan } = body;
 
-    // Validasi tanggal
     if (!tanggal) {
       return NextResponse.json({
         status: '❌ GAGAL',
@@ -92,7 +86,6 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    // Ambil data master untuk hppPerPorsi
     const master = await prisma.dataPenjualan.findFirst();
     if (!master) {
       return NextResponse.json({
@@ -101,7 +94,6 @@ export async function POST(request: Request) {
       }, { status: 404 });
     }
 
-    // Hitung otomatis
     const result = calculateBelanja({
       jumlah: jumlah || undefined,
       total: total || undefined,
@@ -115,7 +107,6 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    // Simpan ke database
     const pembelian = await prisma.riwayatBelanja.create({
       data: {
         tanggal: new Date(tanggal),
@@ -129,48 +120,25 @@ export async function POST(request: Request) {
       },
     });
 
-    // ✅ UPDATE STOK AWAL DI REALISASI HARIAN
-    // Ambil realisasi hari ini
-    const startOfDay = new Date(tanggal);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(tanggal);
-    endOfDay.setHours(23, 59, 59, 999);
+    // Update stok di realisasi harian
+    const tanggalObj = new Date(tanggal);
+    tanggalObj.setHours(0, 0, 0, 0);
 
     const realisasiHariIni = await prisma.realisasiHarian.findUnique({
       where: {
         tanggal_dataPenjualanId: {
-          tanggal: startOfDay,
+          tanggal: tanggalObj,
           dataPenjualanId: master.id,
         },
       },
     });
 
     if (realisasiHariIni) {
-      // Hitung total belanja di hari ini (termasuk yang baru)
-      const totalBelanjaHariIni = await prisma.riwayatBelanja.aggregate({
-        where: {
-          tanggal: { gte: startOfDay, lte: endOfDay },
-          dataPenjualanId: master.id,
-        },
-        _sum: {
-          // Prioritas: jumlah manual, lalu jumlahSystem
-          // Kita hitung manual di aplikasi
-        }
-      });
+      const startOfDay = new Date(tanggalObj);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(tanggalObj);
+      endOfDay.setHours(23, 59, 59, 999);
 
-      // Hitung ulang stokAwal dan sisa
-      // Cari hari sebelumnya
-      const hariSebelumnya = await prisma.realisasiHarian.findFirst({
-        where: {
-          tanggal: { lt: startOfDay },
-          dataPenjualanId: master.id,
-        },
-        orderBy: { tanggal: 'desc' },
-      });
-
-      const stokSebelumnya = hariSebelumnya?.sisa || 0;
-      
-      // Hitung total belanja hari ini (dari semua transaksi)
       const allBelanja = await prisma.riwayatBelanja.findMany({
         where: {
           tanggal: { gte: startOfDay, lte: endOfDay },
@@ -180,18 +148,23 @@ export async function POST(request: Request) {
 
       let totalBelanjaEfektif = 0;
       for (const b of allBelanja) {
-        // Prioritas: jumlah manual > jumlahSystem
         totalBelanjaEfektif += (b.jumlah || b.jumlahSystem || 0);
       }
 
+      const hariSebelumnya = await prisma.realisasiHarian.findFirst({
+        where: {
+          tanggal: { lt: tanggalObj },
+          dataPenjualanId: master.id,
+        },
+        orderBy: { tanggal: 'desc' },
+      });
+
+      const stokSebelumnya = hariSebelumnya?.sisa || 0;
       const stokAwalBaru = stokSebelumnya + totalBelanjaEfektif;
       const sisaBaru = stokAwalBaru - realisasiHariIni.terjual;
 
-      // Update realisasi
       await prisma.realisasiHarian.update({
-        where: {
-          id: realisasiHariIni.id,
-        },
+        where: { id: realisasiHariIni.id },
         data: {
           stokAwal: stokAwalBaru,
           sisa: sisaBaru,
