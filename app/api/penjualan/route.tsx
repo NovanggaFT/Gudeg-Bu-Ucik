@@ -25,10 +25,10 @@ export async function GET() {
       }, { status: 404 });
     }
 
-    // Transform data untuk frontend
+    // ✅ Tambahkan type explicit untuk parameter 'r'
     const transformedData = {
       ...salesData,
-      realisasi: salesData.realisasi.map((r) => ({
+      realisasi: salesData.realisasi.map((r: any) => ({
         ...r,
         hariNama: new Date(r.tanggal).toLocaleDateString('id-ID', { 
           weekday: 'long' 
