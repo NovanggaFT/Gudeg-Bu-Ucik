@@ -1,3 +1,5 @@
+// prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -6,9 +8,12 @@ datasource db {
   provider = "postgresql"
 }
 
-// ========================================
-// MODEL UNTUK DASHBOARD
-// ========================================
+enum StatusStok {
+  aman
+  waspada
+  habis
+  belum_terjadi
+}
 
 model DataPenjualan {
   id              String   @id @default(cuid())
@@ -28,28 +33,44 @@ model DataPenjualan {
 model RealisasiHarian {
   id          String   @id @default(cuid())
   tanggal     DateTime @default(now())
-  hari        Int
   terjual     Int      @default(0)
   sisa        Int      @default(0)
   stokAwal    Int      @default(0)
-  status      String   @default("belum_terjadi")
+  status      StatusStok @default(belum_terjadi)
   perluBelanja Boolean @default(false)
-  belanja     Int      @default(0)
   dataPenjualanId String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
   dataPenjualan DataPenjualan @relation(fields: [dataPenjualanId], references: [id], onDelete: Cascade)
+
+  @@index([tanggal])
+  @@index([dataPenjualanId])
+  @@unique([tanggal, dataPenjualanId])  // 1 hari 1 record
 }
 
 model RiwayatBelanja {
   id          String   @id @default(cuid())
   tanggal     DateTime @default(now())
-  jumlah      Int
+  
+  // 👇 INPUT USER (MANUAL)
+  jumlah      Int?      // Jumlah unit (opsional)
+  total       Int?      // Total harga (opsional)
+  
+  // 👇 SYSTEM (AUTO CALCULATED)
+  jumlahSystem Int?     // Dihitung dari total / hppPerPorsi
+  totalSystem  Int?     // Dihitung dari jumlah x hppPerPorsi
+  
+  // 👇 MASTER DATA (SNAPSHOT saat transaksi)
+  hppPerPorsi  Int      // Copy dari DataPenjualan.hppPerPorsi
+  
   keterangan  String?
   dataPenjualanId String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
   dataPenjualan DataPenjualan @relation(fields: [dataPenjualanId], references: [id], onDelete: Cascade)
+
+  @@index([tanggal])
+  @@index([dataPenjualanId])
 }
