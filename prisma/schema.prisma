@@ -23,11 +23,15 @@ model DataPenjualan {
   targetHarian    Int      @default(200)
   stokAwal        Int      @default(500)
   thresholdBelanja Int    @default(200)
+  tanggalBerlaku  DateTime @default(now())
+  
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
   realisasi       RealisasiHarian[]
   riwayatBelanja  RiwayatBelanja[]
+
+  @@index([tanggalBerlaku])
 }
 
 model RealisasiHarian {
