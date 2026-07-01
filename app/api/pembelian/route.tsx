@@ -50,10 +50,20 @@ export async function GET() {
     const pembelian = await prisma.riwayatBelanja.findMany({
       orderBy: { tanggal: 'asc' },
       include: {
-        dataPenjualan: {
+        product: {
           select: {
+            id: true,
+            name: true,
+            sku: true,
             hppPerPorsi: true,
             hargaJualPerPorsi: true,
+          },
+        },
+        masterData: {
+          select: {
+            id: true,
+            tanggalBerlaku: true,
+            hppPerPorsi: true,
           },
         },
       },
@@ -77,7 +87,14 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { tanggal, jumlah, total, keterangan } = body;
+    const { tanggal, jumlah, total, keterangan, productId } = body;
+
+    if (!productId) {
+      return NextResponse.json({
+        status: '❌ GAGAL',
+        error: 'productId wajib diisi',
+      }, { status: 400 });
+    }
 
     if (!tanggal) {
       return NextResponse.json({
@@ -86,14 +103,38 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    const master = await prisma.dataPenjualan.findFirst();
-    if (!master) {
+    // Cek product
+    const product = await prisma.product.findUnique({
+      where: { id: productId, isActive: true },
+    });
+
+    if (!product) {
       return NextResponse.json({
         status: '❌ GAGAL',
-        error: 'Data master tidak ditemukan',
+        error: 'Produk tidak ditemukan atau tidak aktif',
       }, { status: 404 });
     }
 
+    // Ambil master yang berlaku untuk tanggal ini
+    const tanggalObj = new Date(tanggal);
+    tanggalObj.setHours(0, 0, 0, 0);
+
+    const master = await prisma.masterData.findFirst({
+      where: {
+        productId: productId,
+        tanggalBerlaku: { lte: tanggalObj },
+      },
+      orderBy: { tanggalBerlaku: 'desc' },
+    });
+
+    if (!master) {
+      return NextResponse.json({
+        status: '❌ GAGAL',
+        error: `Tidak ada master yang berlaku untuk tanggal ${tanggal}`,
+      }, { status: 404 });
+    }
+
+    // Hitung otomatis pakai hpp dari master
     const result = calculateBelanja({
       jumlah: jumlah || undefined,
       total: total || undefined,
@@ -107,33 +148,41 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
+    // Simpan pembelian
     const pembelian = await prisma.riwayatBelanja.create({
       data: {
-        tanggal: new Date(tanggal),
+        tanggal: tanggalObj,
+        productId: productId,
+        masterDataId: master.id,
         jumlah: result.jumlah,
         total: result.total,
         jumlahSystem: result.jumlahSystem,
         totalSystem: result.totalSystem,
         hppPerPorsi: master.hppPerPorsi,
         keterangan: keterangan || null,
-        dataPenjualanId: master.id,
+      },
+      include: {
+        product: {
+          select: {
+            name: true,
+            sku: true,
+          },
+        },
       },
     });
 
-    // Update stok di realisasi harian
-    const tanggalObj = new Date(tanggal);
-    tanggalObj.setHours(0, 0, 0, 0);
-
+    // Update stok di realisasi harian (jika ada)
     const realisasiHariIni = await prisma.realisasiHarian.findUnique({
       where: {
-        tanggal_dataPenjualanId: {
+        productId_tanggal: {
+          productId: productId,
           tanggal: tanggalObj,
-          dataPenjualanId: master.id,
         },
       },
     });
 
     if (realisasiHariIni) {
+      // Hitung ulang total belanja di hari ini
       const startOfDay = new Date(tanggalObj);
       startOfDay.setHours(0, 0, 0, 0);
       const endOfDay = new Date(tanggalObj);
@@ -141,8 +190,8 @@ export async function POST(request: Request) {
 
       const allBelanja = await prisma.riwayatBelanja.findMany({
         where: {
+          productId: productId,
           tanggal: { gte: startOfDay, lte: endOfDay },
-          dataPenjualanId: master.id,
         },
       });
 
@@ -151,10 +200,11 @@ export async function POST(request: Request) {
         totalBelanjaEfektif += (b.jumlah || b.jumlahSystem || 0);
       }
 
+      // Cari hari sebelumnya
       const hariSebelumnya = await prisma.realisasiHarian.findFirst({
         where: {
+          productId: productId,
           tanggal: { lt: tanggalObj },
-          dataPenjualanId: master.id,
         },
         orderBy: { tanggal: 'desc' },
       });
@@ -164,7 +214,9 @@ export async function POST(request: Request) {
       const sisaBaru = stokAwalBaru - realisasiHariIni.terjual;
 
       await prisma.realisasiHarian.update({
-        where: { id: realisasiHariIni.id },
+        where: {
+          id: realisasiHariIni.id,
+        },
         data: {
           stokAwal: stokAwalBaru,
           sisa: sisaBaru,
@@ -179,7 +231,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       status: '✅ Berhasil!',
       data: pembelian,
-      message: 'Pembelian berhasil ditambahkan',
+      message: `Pembelian untuk ${pembelian.product.name} berhasil ditambahkan`,
     });
   } catch (error: any) {
     console.error('Error creating pembelian:', error);
