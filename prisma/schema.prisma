@@ -131,14 +131,15 @@ model Penggajian {
 
 model LaporanBulanan {
   id                  String   @id @default(cuid())
-  bulan               DateTime 
+  bulan               DateTime
   menu                String
   qtyProduksi         Int
   costPerPortion      Int
   jumlahCost          Int
   overhead            Int      @default(0)
+  gaji                Int      @default(0) 
   labaKotor           Int
-  profit              Int
+  profit              Int      
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 

@@ -12,8 +12,6 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  Line,
-  ComposedChart,
 } from 'recharts';
 
 interface LaporanBulanan {
@@ -24,12 +22,15 @@ interface LaporanBulanan {
     qtyProduksi: number;
     costPerPortion: number;
     jumlahCost: number;
+    overhead: number;
+    gaji: number;
     labaKotor: number;
     profit: number;
   }>;
   totalQty: number;
   totalCost: number;
   totalOverhead: number;
+  totalGaji: number; // ✅ TAMBAHKAN
   totalLabaKotor: number;
   totalProfit: number;
 }
@@ -72,12 +73,13 @@ export default function Beranda() {
 
   // Data untuk grafik
   const chartData = data.map((item) => ({
-    bulan: item.bulan, // Sudah string display dari API
+    bulan: item.bulan,
     qty: item.totalQty,
     labaKotor: item.totalLabaKotor,
     profit: item.totalProfit,
     cost: item.totalCost,
     overhead: item.totalOverhead,
+    gaji: item.totalGaji, // ✅ TAMBAHKAN
   }));
 
   // Data untuk grafik per menu (stacked)
@@ -140,6 +142,7 @@ export default function Beranda() {
   const totalLabaKotor = data.reduce((sum, d) => sum + d.totalLabaKotor, 0);
   const totalCost = data.reduce((sum, d) => sum + d.totalCost, 0);
   const totalOverhead = data.reduce((sum, d) => sum + d.totalOverhead, 0);
+  const totalGaji = data.reduce((sum, d) => sum + d.totalGaji, 0); // ✅ TAMBAHKAN
 
   return (
     <div className="w-full max-w-7xl mx-auto">
@@ -160,8 +163,8 @@ export default function Beranda() {
         </div>
       </div>
 
-      {/* 4 Cards Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      {/* 5 Cards Summary - TAMBAH GAJI */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
         <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-2xl p-4 text-white">
           <p className="text-sm opacity-80">Total Laba Kotor</p>
           <p className="text-2xl font-bold">{formatRupiah(totalLabaKotor)}</p>
@@ -179,12 +182,17 @@ export default function Beranda() {
           <p className="text-2xl font-bold">{formatRupiah(totalOverhead)}</p>
           <p className="text-xs opacity-70 mt-1">{data.length} bulan</p>
         </div>
+        <div className="bg-gradient-to-r from-pink-500 to-pink-600 rounded-2xl p-4 text-white">
+          <p className="text-sm opacity-80">Total Gaji</p>
+          <p className="text-2xl font-bold">{formatRupiah(totalGaji)}</p>
+          <p className="text-xs opacity-70 mt-1">{data.length} bulan</p>
+        </div>
       </div>
 
-      {/* Grafik 2: Laba Kotor vs Profit vs Cost */}
+      {/* Grafik 2: Laba Kotor vs Profit vs Cost vs Overhead vs Gaji */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6">
         <h3 className="text-sm font-semibold text-gray-700 mb-4">
-          📊 Laba Kotor vs Profit vs Cost
+          📊 Laba Kotor vs Profit vs Cost vs Overhead vs Gaji
         </h3>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={chartData}>
@@ -197,6 +205,7 @@ export default function Beranda() {
             <Bar dataKey="profit" fill="#3B82F6" name="Profit" radius={[4, 4, 0, 0]} />
             <Bar dataKey="cost" fill="#aa1b4b" name="Cost" radius={[4, 4, 0, 0]} />
             <Bar dataKey="overhead" fill="#EF4444" name="Overhead" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="gaji" fill="#EC4899" name="Gaji" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -226,7 +235,7 @@ export default function Beranda() {
         </ResponsiveContainer>
       </div>
 
-      {/* Tabel Detail */}
+      {/* Tabel Detail - TAMBAH KOLOM GAJI & OVERHEAD */}
       <div className="mt-6 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-100">
           <h3 className="text-sm font-semibold text-gray-700">📋 Detail Laporan Bulanan</h3>
@@ -240,6 +249,8 @@ export default function Beranda() {
                 <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 uppercase">Qty</th>
                 <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 uppercase">Cost/Porsi</th>
                 <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 uppercase">Total Cost</th>
+                <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 uppercase">Overhead</th>
+                <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 uppercase">Gaji</th>
                 <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 uppercase">Laba Kotor</th>
                 <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 uppercase">Profit</th>
               </tr>
@@ -257,6 +268,8 @@ export default function Beranda() {
                     <td className="px-3 py-2 text-right text-gray-700">{menu.qtyProduksi.toLocaleString()}</td>
                     <td className="px-3 py-2 text-right text-gray-600">{formatRupiah(menu.costPerPortion)}</td>
                     <td className="px-3 py-2 text-right text-gray-700">{formatRupiah(menu.jumlahCost)}</td>
+                    <td className="px-3 py-2 text-right text-orange-600">{formatRupiah(menu.overhead)}</td>
+                    <td className="px-3 py-2 text-right text-pink-600">{formatRupiah(menu.gaji)}</td>
                     <td className="px-3 py-2 text-right text-green-600">{formatRupiah(menu.labaKotor)}</td>
                     <td className="px-3 py-2 text-right text-blue-600">{formatRupiah(menu.profit)}</td>
                   </tr>

@@ -13,12 +13,15 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 // Total Overhead per tahun = 140.446.771
-// Per bulan = 140.446.771 / 12 = 11.703.897,58 ≈ 11.703.898
 const OVERHEAD_PER_BULAN = Math.round(140446771 / 12);
+// Total Gaji per tahun = 135.200.000
+const GAJI_PER_BULAN = Math.round(135200000 / 12);
 
 console.log(`📊 Overhead per bulan: Rp${OVERHEAD_PER_BULAN.toLocaleString()}`);
+console.log(`📊 Gaji per bulan: Rp${GAJI_PER_BULAN.toLocaleString()}`);
+console.log(`📊 Total Overhead Tahunan: Rp${(OVERHEAD_PER_BULAN * 12).toLocaleString()}`);
+console.log(`📊 Total Gaji Tahunan: Rp${(GAJI_PER_BULAN * 12).toLocaleString()}`);
 
-// Helper: convert bulan string ke Date
 function getBulanDate(bulanStr: string): Date {
   const months: Record<string, number> = {
     'Januari': 0, 'Februari': 1, 'Maret': 2, 'April': 3,
@@ -27,15 +30,9 @@ function getBulanDate(bulanStr: string): Date {
   };
   
   const [namaBulan, tahun] = bulanStr.split(' ');
-  return new Date(parseInt(tahun), months[namaBulan], 1);
-}
-
-// Fungsi untuk bagi overhead ke setiap menu berdasarkan qtyProduksi
-function distributeOverhead(items: any[], totalQty: number) {
-  return items.map((item) => ({
-    ...item,
-    overhead: Math.round((item.qtyProduksi / totalQty) * OVERHEAD_PER_BULAN),
-  }));
+  const date = new Date(parseInt(tahun), months[namaBulan], 1);
+  date.setHours(date.getHours() + 7);
+  return date;
 }
 
 const laporanDataRaw = [
@@ -89,11 +86,9 @@ const laporanDataRaw = [
   { bulanStr: 'Desember 2025', menu: 'Ayam Bakar Bumbu Kecap', qtyProduksi: 724, costPerPortion: 14175, jumlahCost: 10262849, labaKotor: 16652000 },
 ];
 
-// Process data: group by bulan, distribute overhead, calculate profit
 function processLaporanData(data: any[]) {
   const grouped: Record<string, any[]> = {};
   
-  // Group by bulanStr
   for (const item of data) {
     if (!grouped[item.bulanStr]) {
       grouped[item.bulanStr] = [];
@@ -107,30 +102,35 @@ function processLaporanData(data: any[]) {
     const totalQty = items.reduce((sum, item) => sum + item.qtyProduksi, 0);
     const bulanDate = getBulanDate(bulanStr);
     
-    // Distribute overhead
-    const itemsWithOverhead = items.map((item) => {
+    // ✅ PROFIT = Laba Kotor - Cost - Overhead - Gaji
+    const itemsWithCost = items.map((item) => {
       const overhead = Math.round((item.qtyProduksi / totalQty) * OVERHEAD_PER_BULAN);
-      const totalCost = item.jumlahCost + overhead;
+      const gaji = Math.round((item.qtyProduksi / totalQty) * GAJI_PER_BULAN);
+      const totalCost = item.jumlahCost + overhead + gaji;
       const profit = item.labaKotor - totalCost;
       
       return {
         ...item,
-        bulan: bulanDate, // ✅ SIMPAN SEBAGAI DATE
+        bulan: bulanDate,
         overhead,
+        gaji,
         totalCost,
         profit,
       };
     });
     
-    result.push(...itemsWithOverhead);
+    result.push(...itemsWithCost);
   }
   
   return result;
 }
 
 async function importLaporan() {
-  console.log('📥 Importing laporan bulanan dengan overhead...');
+  console.log('📥 Importing laporan bulanan dengan overhead & gaji...');
   console.log(`📊 Overhead per bulan: Rp${OVERHEAD_PER_BULAN.toLocaleString()}`);
+  console.log(`📊 Gaji per bulan: Rp${GAJI_PER_BULAN.toLocaleString()}`);
+  console.log(`📊 Total Overhead Tahunan: Rp${(OVERHEAD_PER_BULAN * 12).toLocaleString()}`);
+  console.log(`📊 Total Gaji Tahunan: Rp${(GAJI_PER_BULAN * 12).toLocaleString()}`);
   
   const processedData = processLaporanData(laporanDataRaw);
   console.log(`📊 Found ${processedData.length} records`);
@@ -145,20 +145,19 @@ async function importLaporan() {
 
   for (const item of processedData) {
     batch.push({
-      bulan: item.bulan, // ✅ SEKARANG DATE
+      bulan: item.bulan,
       menu: item.menu,
       qtyProduksi: item.qtyProduksi,
       costPerPortion: item.costPerPortion,
       jumlahCost: item.jumlahCost,
       overhead: item.overhead,
+      gaji: item.gaji,
       labaKotor: item.labaKotor,
       profit: item.profit,
     });
 
     if (batch.length >= batchSize) {
-      await prisma.laporanBulanan.createMany({
-        data: batch,
-      });
+      await prisma.laporanBulanan.createMany({ data: batch });
       totalInserted += batch.length;
       batch = [];
       console.log(`✅ Inserted ${totalInserted}/${processedData.length}`);
@@ -166,36 +165,35 @@ async function importLaporan() {
   }
 
   if (batch.length > 0) {
-    await prisma.laporanBulanan.createMany({
-      data: batch,
-    });
+    await prisma.laporanBulanan.createMany({ data: batch });
     totalInserted += batch.length;
   }
 
   console.log(`✅ Import selesai! Total: ${totalInserted} records`);
 
-  // Preview - ORDER BY BULAN (urut)
+  // Preview
   const preview = await prisma.laporanBulanan.findMany({
     take: 10,
     orderBy: { bulan: 'asc' },
   });
-  console.log('\n📋 Preview (sorted by month):');
+  console.log('\n📋 Preview:');
   preview.forEach(p => {
     const bulanStr = p.bulan.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
-    console.log(`   ${bulanStr} | ${p.menu} | Qty:${p.qtyProduksi} | Overhead:${p.overhead.toLocaleString()} | Profit:${p.profit.toLocaleString()}`);
+    console.log(`   ${bulanStr} | ${p.menu} | Gaji:${p.gaji.toLocaleString()} | Overhead:${p.overhead.toLocaleString()} | Profit:${p.profit.toLocaleString()}`);
   });
 
-  // Summary per bulan (urut)
+  // Summary per bulan
   const summary = await prisma.$queryRaw`
     SELECT 
       TO_CHAR(bulan, 'Month YYYY') as bulan,
       SUM(overhead) as total_overhead,
+      SUM(gaji) as total_gaji,
       SUM(profit) as total_profit
     FROM "LaporanBulanan"
     GROUP BY bulan
     ORDER BY bulan
   `;
-  console.log('\n📊 Summary per bulan (sorted):');
+  console.log('\n📊 Summary per bulan:');
   console.table(summary);
 
   await prisma.$disconnect();
