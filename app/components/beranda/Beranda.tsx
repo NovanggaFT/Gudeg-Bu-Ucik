@@ -23,14 +23,14 @@ interface LaporanBulanan {
     costPerPortion: number;
     jumlahCost: number;
     overhead: number;
-    gaji: number;
+    gaji: number;        // ✅ PASTIKAN ADA
     labaKotor: number;
     profit: number;
   }>;
   totalQty: number;
   totalCost: number;
   totalOverhead: number;
-  totalGaji: number; // ✅ TAMBAHKAN
+  totalGaji: number;     // ✅ PASTIKAN ADA
   totalLabaKotor: number;
   totalProfit: number;
 }
@@ -142,7 +142,7 @@ export default function Beranda() {
   const totalLabaKotor = data.reduce((sum, d) => sum + d.totalLabaKotor, 0);
   const totalCost = data.reduce((sum, d) => sum + d.totalCost, 0);
   const totalOverhead = data.reduce((sum, d) => sum + d.totalOverhead, 0);
-  const totalGaji = data.reduce((sum, d) => sum + d.totalGaji, 0); // ✅ TAMBAHKAN
+  const totalGaji = data.reduce((sum, d) => sum + (d.totalGaji || 0), 0);
 
   return (
     <div className="w-full max-w-7xl mx-auto">
@@ -169,10 +169,6 @@ export default function Beranda() {
           <p className="text-sm opacity-80">Total Laba Kotor</p>
           <p className="text-2xl font-bold">{formatRupiah(totalLabaKotor)}</p>
         </div>
-        <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-2xl p-4 text-white">
-          <p className="text-sm opacity-80">Total Profit</p>
-          <p className="text-2xl font-bold">{formatRupiah(totalProfit)}</p>
-        </div>
         <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl p-4 text-white">
           <p className="text-sm opacity-80">Total Cost</p>
           <p className="text-2xl font-bold">{formatRupiah(totalCost)}</p>
@@ -186,6 +182,10 @@ export default function Beranda() {
           <p className="text-sm opacity-80">Total Gaji</p>
           <p className="text-2xl font-bold">{formatRupiah(totalGaji)}</p>
           <p className="text-xs opacity-70 mt-1">{data.length} bulan</p>
+        </div>
+        <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-2xl p-4 text-white">
+          <p className="text-sm opacity-80">Total Profit</p>
+          <p className="text-2xl font-bold">{formatRupiah(totalProfit)}</p>
         </div>
       </div>
 
@@ -202,10 +202,10 @@ export default function Beranda() {
             <Tooltip formatter={(value: any) => formatRupiah(value)} />
             <Legend />
             <Bar dataKey="labaKotor" fill="#10B981" name="Laba Kotor" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="profit" fill="#3B82F6" name="Profit" radius={[4, 4, 0, 0]} />
             <Bar dataKey="cost" fill="#aa1b4b" name="Cost" radius={[4, 4, 0, 0]} />
             <Bar dataKey="overhead" fill="#EF4444" name="Overhead" radius={[4, 4, 0, 0]} />
             <Bar dataKey="gaji" fill="#EC4899" name="Gaji" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="profit" fill="#3B82F6" name="Profit" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>

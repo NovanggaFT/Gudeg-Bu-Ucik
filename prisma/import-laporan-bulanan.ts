@@ -14,13 +14,38 @@ const prisma = new PrismaClient({ adapter });
 
 // Total Overhead per tahun = 140.446.771
 const OVERHEAD_PER_BULAN = Math.round(140446771 / 12);
-// Total Gaji per tahun = 135.200.000
-const GAJI_PER_BULAN = Math.round(135200000 / 12);
+
+// ✅ GAJI PER BULAN (dari data penggajian)
+// Kitchen: 3 orang × Rp100.000 × 338 hari = Rp101.400.000
+// Seller: 2 orang × Rp50.000 × 338 hari = Rp33.800.000
+// Total Gaji Tahunan = Rp135.200.000
+const GAJI_PER_BULAN = Math.round(135200000 / 12); // Rp11.266.667
+
+// ✅ DETAIL GAJI PER BULAN (berdasarkan hari kerja)
+// Data ini diambil dari generate-csv.ts (338 hari kerja)
+const GAJI_PER_BULAN_DETAIL = {
+  'Januari 2025': 27 * 400000,   // 27 hari × Rp400.000 = Rp10.800.000
+  'Februari 2025': 24 * 400000,  // 24 hari × Rp400.000 = Rp9.600.000
+  'Maret 2025': 16 * 400000,     // 16 hari × Rp400.000 = Rp6.400.000
+  'April 2025': 22 * 400000,     // 22 hari × Rp400.000 = Rp8.800.000
+  'Mei 2025': 28 * 400000,       // 28 hari × Rp400.000 = Rp11.200.000
+  'Juni 2025': 30 * 400000,      // 30 hari × Rp400.000 = Rp12.000.000
+  'Juli 2025': 31 * 400000,      // 31 hari × Rp400.000 = Rp12.400.000
+  'Agustus 2025': 31 * 400000,   // 31 hari × Rp400.000 = Rp12.400.000
+  'September 2025': 30 * 400000, // 30 hari × Rp400.000 = Rp12.000.000
+  'Oktober 2025': 24 * 400000,   // 24 hari × Rp400.000 = Rp9.600.000
+  'November 2025': 30 * 400000,  // 30 hari × Rp400.000 = Rp12.000.000
+  'Desember 2025': 31 * 400000,  // 31 hari × Rp400.000 = Rp12.400.000
+};
 
 console.log(`📊 Overhead per bulan: Rp${OVERHEAD_PER_BULAN.toLocaleString()}`);
-console.log(`📊 Gaji per bulan: Rp${GAJI_PER_BULAN.toLocaleString()}`);
+console.log(`📊 Gaji per bulan (rata-rata): Rp${GAJI_PER_BULAN.toLocaleString()}`);
 console.log(`📊 Total Overhead Tahunan: Rp${(OVERHEAD_PER_BULAN * 12).toLocaleString()}`);
 console.log(`📊 Total Gaji Tahunan: Rp${(GAJI_PER_BULAN * 12).toLocaleString()}`);
+console.log('\n📊 Detail Gaji per Bulan:');
+for (const [bulan, gaji] of Object.entries(GAJI_PER_BULAN_DETAIL)) {
+  console.log(`   ${bulan}: Rp${gaji.toLocaleString()}`);
+}
 
 function getBulanDate(bulanStr: string): Date {
   const months: Record<string, number> = {
@@ -102,10 +127,13 @@ function processLaporanData(data: any[]) {
     const totalQty = items.reduce((sum, item) => sum + item.qtyProduksi, 0);
     const bulanDate = getBulanDate(bulanStr);
     
-    // ✅ PROFIT = Laba Kotor - Cost - Overhead - Gaji
+    // ✅ Ambil gaji detail per bulan dari GAJI_PER_BULAN_DETAIL
+    const gajiBulan = GAJI_PER_BULAN_DETAIL[bulanStr as keyof typeof GAJI_PER_BULAN_DETAIL] || GAJI_PER_BULAN;
+    
     const itemsWithCost = items.map((item) => {
       const overhead = Math.round((item.qtyProduksi / totalQty) * OVERHEAD_PER_BULAN);
-      const gaji = Math.round((item.qtyProduksi / totalQty) * GAJI_PER_BULAN);
+      // ✅ Gaji dibagi proporsional berdasarkan qty produksi
+      const gaji = Math.round((item.qtyProduksi / totalQty) * gajiBulan);
       const totalCost = item.jumlahCost + overhead + gaji;
       const profit = item.labaKotor - totalCost;
       
@@ -126,14 +154,16 @@ function processLaporanData(data: any[]) {
 }
 
 async function importLaporan() {
-  console.log('📥 Importing laporan bulanan dengan overhead & gaji...');
+  console.log('📥 Importing laporan bulanan dengan overhead & gaji detail...');
   console.log(`📊 Overhead per bulan: Rp${OVERHEAD_PER_BULAN.toLocaleString()}`);
-  console.log(`📊 Gaji per bulan: Rp${GAJI_PER_BULAN.toLocaleString()}`);
-  console.log(`📊 Total Overhead Tahunan: Rp${(OVERHEAD_PER_BULAN * 12).toLocaleString()}`);
-  console.log(`📊 Total Gaji Tahunan: Rp${(GAJI_PER_BULAN * 12).toLocaleString()}`);
+  console.log(`📊 Total Gaji Tahunan: Rp135.200.000`);
+  console.log('\n📊 Detail Gaji per Bulan:');
+  for (const [bulan, gaji] of Object.entries(GAJI_PER_BULAN_DETAIL)) {
+    console.log(`   ${bulan}: Rp${gaji.toLocaleString()}`);
+  }
   
   const processedData = processLaporanData(laporanDataRaw);
-  console.log(`📊 Found ${processedData.length} records`);
+  console.log(`\n📊 Found ${processedData.length} records`);
 
   // Hapus data lama
   await prisma.laporanBulanan.deleteMany();
