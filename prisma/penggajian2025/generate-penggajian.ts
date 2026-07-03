@@ -12,7 +12,7 @@ const KARYAWAN = [
   { nama: 'Aziz', posisi: 'Seller', gaji: 50000 },
 ];
 
-// ✅ DAFTAR TANGGAL LIBUR
+// ✅ HANYA LIBUR YANG KAMU MINTA (tanpa Minggu & tanpa hari nasional)
 const LIBUR: string[] = [];
 
 // 1 Maret - 15 Maret 2025
@@ -54,7 +54,8 @@ function generateCSV() {
   while (currentDate <= endDate) {
     const dateStr = currentDate.toISOString().split('T')[0];
     
-    if (currentDate.getDay() !== 0 && !isLibur(dateStr)) {
+    // ✅ HANYA SKIP LIBUR YANG KAMU MINTA (tanpa Minggu)
+    if (!isLibur(dateStr)) {
       for (const k of KARYAWAN) {
         rows.push(`${k.nama},${k.posisi},${k.gaji},${dateStr}`);
       }

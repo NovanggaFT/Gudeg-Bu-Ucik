@@ -1,4 +1,4 @@
-// prisma/import-laporan-bulanan.ts
+// prisma/laporan2025/import-laporan-bulanan.ts
 
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
@@ -15,33 +15,32 @@ const prisma = new PrismaClient({ adapter });
 // Total Overhead per tahun = 140.446.771
 const OVERHEAD_PER_BULAN = Math.round(140446771 / 12);
 
-// ✅ GAJI PER BULAN (dari data penggajian)
-// Kitchen: 3 orang × Rp100.000 × 338 hari = Rp101.400.000
-// Seller: 2 orang × Rp50.000 × 338 hari = Rp33.800.000
-// Total Gaji Tahunan = Rp135.200.000
-const GAJI_PER_BULAN = Math.round(135200000 / 12); // Rp11.266.667
-
-// ✅ DETAIL GAJI PER BULAN (berdasarkan hari kerja)
-// Data ini diambil dari generate-csv.ts (338 hari kerja)
-const GAJI_PER_BULAN_DETAIL = {
-  'Januari 2025': 27 * 400000,   // 27 hari × Rp400.000 = Rp10.800.000
-  'Februari 2025': 24 * 400000,  // 24 hari × Rp400.000 = Rp9.600.000
-  'Maret 2025': 16 * 400000,     // 16 hari × Rp400.000 = Rp6.400.000
-  'April 2025': 22 * 400000,     // 22 hari × Rp400.000 = Rp8.800.000
-  'Mei 2025': 28 * 400000,       // 28 hari × Rp400.000 = Rp11.200.000
-  'Juni 2025': 30 * 400000,      // 30 hari × Rp400.000 = Rp12.000.000
-  'Juli 2025': 31 * 400000,      // 31 hari × Rp400.000 = Rp12.400.000
-  'Agustus 2025': 31 * 400000,   // 31 hari × Rp400.000 = Rp12.400.000
-  'September 2025': 30 * 400000, // 30 hari × Rp400.000 = Rp12.000.000
-  'Oktober 2025': 24 * 400000,   // 24 hari × Rp400.000 = Rp9.600.000
-  'November 2025': 30 * 400000,  // 30 hari × Rp400.000 = Rp12.000.000
-  'Desember 2025': 31 * 400000,  // 31 hari × Rp400.000 = Rp12.400.000
+// ✅ HARI KERJA PER BULAN (TANPA LIBUR MINGGU & NASIONAL)
+const HARI_KERJA_PER_BULAN: Record<string, number> = {
+  'Januari 2025': 31,
+  'Februari 2025': 28,
+  'Maret 2025': 16,
+  'April 2025': 25,
+  'Mei 2025': 28,
+  'Juni 2025': 30,
+  'Juli 2025': 31,
+  'Agustus 2025': 31,
+  'September 2025': 30,
+  'Oktober 2025': 27,
+  'November 2025': 30,
+  'Desember 2025': 31,
 };
 
+// ✅ GAJI PER BULAN = HARI KERJA × 400.000
+const GAJI_PER_BULAN_DETAIL: Record<string, number> = {};
+for (const [bulan, hari] of Object.entries(HARI_KERJA_PER_BULAN)) {
+  GAJI_PER_BULAN_DETAIL[bulan] = hari * 400000;
+}
+
+const TOTAL_GAJI_TAHUNAN = Object.values(GAJI_PER_BULAN_DETAIL).reduce((a, b) => a + b, 0);
+
 console.log(`📊 Overhead per bulan: Rp${OVERHEAD_PER_BULAN.toLocaleString()}`);
-console.log(`📊 Gaji per bulan (rata-rata): Rp${GAJI_PER_BULAN.toLocaleString()}`);
-console.log(`📊 Total Overhead Tahunan: Rp${(OVERHEAD_PER_BULAN * 12).toLocaleString()}`);
-console.log(`📊 Total Gaji Tahunan: Rp${(GAJI_PER_BULAN * 12).toLocaleString()}`);
+console.log(`📊 Total Gaji Tahunan: Rp${TOTAL_GAJI_TAHUNAN.toLocaleString()}`);
 console.log('\n📊 Detail Gaji per Bulan:');
 for (const [bulan, gaji] of Object.entries(GAJI_PER_BULAN_DETAIL)) {
   console.log(`   ${bulan}: Rp${gaji.toLocaleString()}`);
@@ -60,6 +59,7 @@ function getBulanDate(bulanStr: string): Date {
   return date;
 }
 
+// ✅ TAMBAHKAN laporanDataRaw
 const laporanDataRaw = [
   // Januari 2025
   { bulanStr: 'Januari 2025', menu: 'Nasi Gudeg Campur', qtyProduksi: 8090, costPerPortion: 11111, jumlahCost: 89890190, labaKotor: 129440000 },
@@ -127,13 +127,20 @@ function processLaporanData(data: any[]) {
     const totalQty = items.reduce((sum, item) => sum + item.qtyProduksi, 0);
     const bulanDate = getBulanDate(bulanStr);
     
-    // ✅ Ambil gaji detail per bulan dari GAJI_PER_BULAN_DETAIL
-    const gajiBulan = GAJI_PER_BULAN_DETAIL[bulanStr as keyof typeof GAJI_PER_BULAN_DETAIL] || GAJI_PER_BULAN;
-    
-    const itemsWithCost = items.map((item) => {
+    const gajiBulan = GAJI_PER_BULAN_DETAIL[bulanStr] || 0;
+    let remainingGaji = gajiBulan;
+
+    const itemsWithCost = items.map((item, index) => {
       const overhead = Math.round((item.qtyProduksi / totalQty) * OVERHEAD_PER_BULAN);
-      // ✅ Gaji dibagi proporsional berdasarkan qty produksi
-      const gaji = Math.round((item.qtyProduksi / totalQty) * gajiBulan);
+      
+      let gaji;
+      if (index === items.length - 1) {
+        gaji = remainingGaji;
+      } else {
+        gaji = Math.round((item.qtyProduksi / totalQty) * gajiBulan);
+        remainingGaji -= gaji;
+      }
+      
       const totalCost = item.jumlahCost + overhead + gaji;
       const profit = item.labaKotor - totalCost;
       
@@ -154,18 +161,13 @@ function processLaporanData(data: any[]) {
 }
 
 async function importLaporan() {
-  console.log('📥 Importing laporan bulanan dengan overhead & gaji detail...');
+  console.log('\n📥 Importing laporan bulanan dengan overhead & gaji detail...');
   console.log(`📊 Overhead per bulan: Rp${OVERHEAD_PER_BULAN.toLocaleString()}`);
-  console.log(`📊 Total Gaji Tahunan: Rp135.200.000`);
-  console.log('\n📊 Detail Gaji per Bulan:');
-  for (const [bulan, gaji] of Object.entries(GAJI_PER_BULAN_DETAIL)) {
-    console.log(`   ${bulan}: Rp${gaji.toLocaleString()}`);
-  }
+  console.log(`📊 Total Gaji Tahunan: Rp${TOTAL_GAJI_TAHUNAN.toLocaleString()}`);
   
   const processedData = processLaporanData(laporanDataRaw);
   console.log(`\n📊 Found ${processedData.length} records`);
 
-  // Hapus data lama
   await prisma.laporanBulanan.deleteMany();
   console.log('🗑️ Data lama dihapus');
 
@@ -225,6 +227,12 @@ async function importLaporan() {
   `;
   console.log('\n📊 Summary per bulan:');
   console.table(summary);
+
+  // Total Gaji dari database
+  const totalGajiDb = await prisma.laporanBulanan.aggregate({
+    _sum: { gaji: true },
+  });
+  console.log(`\n📊 Total Gaji di Database: Rp${(totalGajiDb._sum.gaji || 0).toLocaleString()}`);
 
   await prisma.$disconnect();
 }
