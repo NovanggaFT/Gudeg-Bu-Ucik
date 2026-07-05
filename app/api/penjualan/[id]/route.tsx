@@ -23,7 +23,7 @@ export async function DELETE(
 
     return NextResponse.json({
       status: '✅ Berhasil!',
-      message: 'Data penjualan berhasil dihapus',
+      message: 'Data berhasil dihapus',
     });
   } catch (error: any) {
     console.error('Error deleting penjualan:', error);

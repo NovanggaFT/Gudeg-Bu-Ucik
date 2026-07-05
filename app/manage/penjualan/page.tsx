@@ -6,10 +6,20 @@ import { useState, useEffect, useRef } from 'react';
 import Swal from 'sweetalert2';
 import FilterBar from '@/app/components/ui/FilterBar';
 
+interface Produk {
+  id: string;
+  nama: string;
+  sku: string;
+  hpp: number;
+  hargaJual: number;
+  stok: number;
+}
+
 interface Penjualan {
   id: string;
   tanggal: string;
-  produk: string;
+  produkId: string;
+  produk: Produk;
   qty: number;
   hargaJual: number;
   hpp: number;
@@ -27,6 +37,7 @@ const formatRupiah = (angka: number) => {
 export default function PenjualanPage() {
   const [data, setData] = useState<Penjualan[]>([]);
   const [filteredData, setFilteredData] = useState<Penjualan[]>([]);
+  const [produkList, setProdukList] = useState<Produk[]>([]);
   const [filterMonth, setFilterMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -37,22 +48,27 @@ export default function PenjualanPage() {
   const [showForm, setShowForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const [produkList, setProdukList] = useState<string[]>([]);
-  const [produkSuggestions, setProdukSuggestions] = useState<string[]>([]);
-  const [showProdukSuggestions, setShowProdukSuggestions] = useState(false);
-  const [selectedProdukIndex, setSelectedProdukIndex] = useState(-1);
-  
-  const produkInputRef = useRef<HTMLInputElement>(null);
-
   const [formData, setFormData] = useState({
-    produk: '',
+    produkId: '',
     qty: '',
     tanggal: new Date().toISOString().split('T')[0],
     hargaJual: '',
-    hpp: '',
   });
 
-  // ✅ LOAD DATA
+  // ✅ Ambil produk untuk dropdown
+  const fetchProduk = async () => {
+    try {
+      const res = await fetch('/api/products');
+      const result = await res.json();
+      if (result.status === '✅ Berhasil!') {
+        setProdukList(result.data);
+      }
+    } catch (error) {
+      console.error('Error fetching produk:', error);
+    }
+  };
+
+  // ✅ Ambil data penjualan
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -66,21 +82,8 @@ export default function PenjualanPage() {
       const result = await res.json();
       
       if (result.status === '✅ Berhasil!') {
-        // Transform data
-        const transformed = result.data.map((item: any) => ({
-          id: item.id,
-          tanggal: item.tanggal,
-          produk: item.produk.nama || item.produk,
-          qty: item.qty,
-          hargaJual: item.hargaJual,
-          hpp: item.hpp,
-          profit: item.profit,
-        }));
-        setData(transformed);
-        
-        const uniqueProduk = [...new Set(transformed.map((item: Penjualan) => item.produk))] as string[];
-        setProdukList(uniqueProduk);
-        applyFilters(transformed, filterMonth, filterProduk);
+        setData(result.data);
+        applyFilters(result.data, filterMonth, filterProduk);
       } else {
         throw new Error(result.error || 'Gagal mengambil data');
       }
@@ -95,6 +98,7 @@ export default function PenjualanPage() {
   };
 
   useEffect(() => {
+    fetchProduk();
     fetchData();
   }, []);
 
@@ -106,7 +110,7 @@ export default function PenjualanPage() {
     }
 
     if (produk !== 'all') {
-      filtered = filtered.filter((item) => item.produk === produk);
+      filtered = filtered.filter((item) => item.produkId === produk);
     }
 
     setFilteredData(filtered);
@@ -118,55 +122,26 @@ export default function PenjualanPage() {
     applyFilters(data, month, produk);
   };
 
-  // ============================================
-  // AUTOCOMPLETE PRODUK
-  // ============================================
-  const handleProdukChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setFormData({ ...formData, produk: value });
-    setSelectedProdukIndex(-1);
+  // ✅ Auto-fill harga jual saat produk dipilih
+  const handleProdukChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const produkId = e.target.value;
+    setFormData({ ...formData, produkId, hargaJual: '' });
     
-    if (value.length > 0) {
-      const filtered = produkList.filter(p => 
-        p.toLowerCase().includes(value.toLowerCase())
-      );
-      setProdukSuggestions(filtered);
-      setShowProdukSuggestions(true);
-    } else {
-      setShowProdukSuggestions(false);
+    if (produkId) {
+      const selected = produkList.find(p => p.id === produkId);
+      if (selected) {
+        setFormData(prev => ({ ...prev, produkId, hargaJual: String(selected.hargaJual) }));
+      }
     }
-  };
-
-  const handleProdukKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setSelectedProdukIndex(prev => 
-        prev < produkSuggestions.length - 1 ? prev + 1 : prev
-      );
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setSelectedProdukIndex(prev => prev > 0 ? prev - 1 : -1);
-    } else if (e.key === 'Enter' && selectedProdukIndex >= 0) {
-      e.preventDefault();
-      selectProduk(produkSuggestions[selectedProdukIndex]);
-    } else if (e.key === 'Escape') {
-      setShowProdukSuggestions(false);
-    }
-  };
-
-  const selectProduk = (produk: string) => {
-    setFormData({ ...formData, produk });
-    setShowProdukSuggestions(false);
-    setSelectedProdukIndex(-1);
   };
 
   // ============================================
-  // CRUD - OPTIMISTIC UPDATE
+  // CRUD
   // ============================================
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.produk || !formData.qty || !formData.tanggal) {
+    if (!formData.produkId || !formData.qty || !formData.tanggal) {
       Swal.fire({
         icon: 'warning',
         title: 'Data tidak lengkap!',
@@ -176,8 +151,7 @@ export default function PenjualanPage() {
     }
 
     const qtyNum = Number(formData.qty);
-    const hargaJualNum = Number(formData.hargaJual) || 23000;
-    const hppNum = Number(formData.hpp) || 15000;
+    const hargaJualNum = Number(formData.hargaJual);
 
     if (isNaN(qtyNum) || qtyNum <= 0) {
       Swal.fire({
@@ -188,49 +162,32 @@ export default function PenjualanPage() {
       return;
     }
 
+    if (isNaN(hargaJualNum) || hargaJualNum <= 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Harga Jual tidak valid!',
+        text: 'Harga jual harus lebih dari 0',
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
-    const profit = (hargaJualNum - hppNum) * qtyNum;
-
-    const newData: Penjualan = {
-      id: `temp-${Date.now()}`,
-      tanggal: formData.tanggal,
-      produk: formData.produk,
-      qty: qtyNum,
-      hargaJual: hargaJualNum,
-      hpp: hppNum,
-      profit: profit,
-    };
-
-    setData(prev => [...prev, newData]);
-    applyFilters([...data, newData], filterMonth, filterProduk);
-    
-    setShowForm(false);
-    setFormData({ produk: '', qty: '', tanggal: new Date().toISOString().split('T')[0], hargaJual: '', hpp: '' });
+    // Cari produk untuk dapat HPP
+    const selectedProduk = produkList.find(p => p.id === formData.produkId);
+    const hpp = selectedProduk?.hpp || 0;
+    const profit = (hargaJualNum - hpp) * qtyNum;
 
     try {
-      // 🔥 Cari produk ID dulu
-      const produkRes = await fetch('/api/products');
-      const produkResult = await produkRes.json();
-      const produkMap = produkResult.data.reduce((acc: any, p: any) => {
-        acc[p.nama] = p.id;
-        return acc;
-      }, {});
-
-      const produkId = produkMap[formData.produk];
-      if (!produkId) {
-        throw new Error('Produk tidak ditemukan');
-      }
-
       const res = await fetch('/api/penjualan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tanggal: formData.tanggal,
-          produkId: produkId,
+          produkId: formData.produkId,
           qty: qtyNum,
           hargaJual: hargaJualNum,
-          hpp: hppNum,
+          hpp: hpp,
           profit: profit,
         }),
       });
@@ -238,19 +195,17 @@ export default function PenjualanPage() {
       const result = await res.json();
       
       if (result.status === '✅ Berhasil!') {
-        setData(prev => prev.map(item => 
-          item.id === newData.id ? { ...result.data, produk: formData.produk } : item
-        ));
-        
+        setShowForm(false);
+        setFormData({ produkId: '', qty: '', tanggal: new Date().toISOString().split('T')[0], hargaJual: '' });
+        await fetchData();
         Swal.fire({
           icon: 'success',
           title: '✅ Berhasil!',
-          text: 'Data penjualan berhasil ditambahkan',
+          text: 'Penjualan berhasil ditambahkan',
           timer: 1500,
           showConfirmButton: false,
         });
       } else {
-        setData(prev => prev.filter(item => item.id !== newData.id));
         Swal.fire({
           icon: 'error',
           title: 'Gagal!',
@@ -258,7 +213,6 @@ export default function PenjualanPage() {
         });
       }
     } catch (error: any) {
-      setData(prev => prev.filter(item => item.id !== newData.id));
       Swal.fire({
         icon: 'error',
         title: 'Error!',
@@ -269,54 +223,31 @@ export default function PenjualanPage() {
     }
   };
 
-  const handleDelete = async (id: string, produk: string) => {
+  const handleDelete = async (id: string, nama: string) => {
     const result = await Swal.fire({
-      title: `Hapus data ${produk}?`,
+      title: `Hapus penjualan ${nama}?`,
       text: "Data akan dihapus permanen!",
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#d33',
-      cancelButtonColor: '#3085d6',
       confirmButtonText: 'Ya, hapus!',
       cancelButtonText: 'Batal'
     });
 
     if (result.isConfirmed) {
-      const oldData = [...data];
-      setData(prev => prev.filter(item => item.id !== id));
-      applyFilters(data.filter(item => item.id !== id), filterMonth, filterProduk);
-
       try {
         const res = await fetch(`/api/penjualan/${id}`, {
           method: 'DELETE',
         });
-        const result = await res.json();
         
-        if (result.status === '✅ Berhasil!') {
-          Swal.fire({
-            icon: 'success',
-            title: '✅ Berhasil!',
-            text: 'Data berhasil dihapus',
-            timer: 1500,
-            showConfirmButton: false,
-          });
+        if (res.ok) {
+          await fetchData();
+          Swal.fire({ icon: 'success', title: '✅ Berhasil!', timer: 1500, showConfirmButton: false });
         } else {
-          setData(oldData);
-          applyFilters(oldData, filterMonth, filterProduk);
-          Swal.fire({
-            icon: 'error',
-            title: 'Gagal!',
-            text: 'Gagal menghapus data',
-          });
+          throw new Error('Gagal menghapus');
         }
       } catch (error) {
-        setData(oldData);
-        applyFilters(oldData, filterMonth, filterProduk);
-        Swal.fire({
-          icon: 'error',
-          title: 'Error!',
-          text: 'Terjadi kesalahan',
-        });
+        Swal.fire({ icon: 'error', title: 'Gagal!' });
       }
     }
   };
@@ -325,7 +256,7 @@ export default function PenjualanPage() {
   const totalQty = filteredData.reduce((sum, item) => sum + item.qty, 0);
   const totalProfit = filteredData.reduce((sum, item) => sum + item.profit, 0);
   const totalRevenue = filteredData.reduce((sum, item) => sum + (item.qty * item.hargaJual), 0);
-  const uniqueProduk = [...new Set(filteredData.map(item => item.produk))];
+  const uniqueProduk = [...new Set(filteredData.map(item => item.produk?.nama || item.produkId))];
 
   if (loading) {
     return (
@@ -377,74 +308,77 @@ export default function PenjualanPage() {
         {/* Form Tambah */}
         {showForm && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
-            <h3 className="text-sm font-semibold text-gray-700 mb-4">Tambah Data Penjualan</h3>
+            <h3 className="text-sm font-semibold text-gray-700 mb-4">📝 Tambah Data Penjualan</h3>
             <form onSubmit={handleSubmit}>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="relative">
-                  <input
-                    ref={produkInputRef}
-                    type="text"
-                    placeholder="Produk"
-                    value={formData.produk}
+                {/* ✅ Dropdown Produk */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Produk</label>
+                  <select
+                    value={formData.produkId}
                     onChange={handleProdukChange}
-                    onKeyDown={handleProdukKeyDown}
-                    onFocus={() => {
-                      if (formData.produk.length > 0) {
-                        const filtered = produkList.filter(p => 
-                          p.toLowerCase().includes(formData.produk.toLowerCase())
-                        );
-                        setProdukSuggestions(filtered);
-                        setShowProdukSuggestions(true);
-                      }
-                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
                     required
-                    autoComplete="off"
-                  />
-                  {showProdukSuggestions && produkSuggestions.length > 0 && (
-                    <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto mt-1">
-                      {produkSuggestions.map((name, index) => (
-                        <button
-                          key={name}
-                          type="button"
-                          onClick={() => selectProduk(name)}
-                          onMouseEnter={() => setSelectedProdukIndex(index)}
-                          className={`w-full px-3 py-2 text-left text-sm hover:bg-blue-50 text-gray-900 ${
-                            index === selectedProdukIndex ? 'bg-blue-100' : ''
-                          }`}
-                        >
-                          {name}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  >
+                    <option value="">Pilih Produk</option>
+                    {produkList.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.nama} ({p.sku}) - {formatRupiah(p.hargaJual)}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
-                <input
-                  type="number"
-                  placeholder="Qty"
-                  value={formData.qty}
-                  onChange={(e) => setFormData({ ...formData, qty: e.target.value })}
-                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                  required
-                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Qty</label>
+                  <input
+                    type="number"
+                    placeholder="Jumlah"
+                    value={formData.qty}
+                    onChange={(e) => setFormData({ ...formData, qty: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                    required
+                  />
+                </div>
 
-                <input
-                  type="number"
-                  placeholder="Harga Jual (opsional)"
-                  value={formData.hargaJual}
-                  onChange={(e) => setFormData({ ...formData, hargaJual: e.target.value })}
-                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Harga Jual
+                    <span className="text-xs text-gray-400 ml-1">(auto-fill dari produk)</span>
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="Harga Jual"
+                    value={formData.hargaJual}
+                    onChange={(e) => setFormData({ ...formData, hargaJual: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                    required
+                  />
+                </div>
 
-                <input
-                  type="date"
-                  value={formData.tanggal}
-                  onChange={(e) => setFormData({ ...formData, tanggal: e.target.value })}
-                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                  required
-                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tanggal</label>
+                  <input
+                    type="date"
+                    value={formData.tanggal}
+                    onChange={(e) => setFormData({ ...formData, tanggal: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                    required
+                  />
+                </div>
               </div>
+              
+              {/* Preview */}
+              {formData.produkId && formData.qty && formData.hargaJual && (
+                <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm text-gray-600">
+                  <span className="font-medium">Preview:</span>
+                  {(Number(formData.qty) * Number(formData.hargaJual)).toLocaleString()} × {formatRupiah(Number(formData.hargaJual))} = 
+                  <span className="font-bold text-blue-600 ml-1">
+                    {formatRupiah(Number(formData.qty) * Number(formData.hargaJual))}
+                  </span>
+                </div>
+              )}
+
               <div className="flex gap-3 mt-4">
                 <button
                   type="submit"
@@ -483,7 +417,7 @@ export default function PenjualanPage() {
           >
             <option value="all">📋 Semua Produk</option>
             {produkList.map((p) => (
-              <option key={p} value={p}>{p}</option>
+              <option key={p.id} value={p.id}>{p.nama}</option>
             ))}
           </select>
           
@@ -547,14 +481,14 @@ export default function PenjualanPage() {
                           year: 'numeric',
                         })}
                       </td>
-                      <td className="px-4 py-2 font-medium text-gray-900">{item.produk}</td>
+                      <td className="px-4 py-2 font-medium text-gray-900">{item.produk?.nama || '-'}</td>
                       <td className="px-4 py-2 text-right text-gray-700">{item.qty}</td>
                       <td className="px-4 py-2 text-right text-gray-600">{formatRupiah(item.hargaJual)}</td>
                       <td className="px-4 py-2 text-right text-gray-500">{formatRupiah(item.hpp)}</td>
                       <td className="px-4 py-2 text-right text-green-600">{formatRupiah(item.profit)}</td>
                       <td className="px-4 py-2 text-center">
                         <button
-                          onClick={() => handleDelete(item.id, item.produk)}
+                          onClick={() => handleDelete(item.id, item.produk?.nama || '')}
                           className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
                         >
                           🗑️

@@ -16,6 +16,8 @@ export async function GET() {
             id: true,
             nama: true,
             sku: true,
+            hpp: true,
+            hargaJual: true,
           },
         },
       },
@@ -42,6 +44,8 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { tanggal, produkId, qty, hargaJual, hpp, profit } = body;
+
+    console.log('📝 Creating penjualan:', { tanggal, produkId, qty, hargaJual, hpp, profit });
 
     // Validasi
     if (!tanggal || !produkId || !qty) {
@@ -72,14 +76,15 @@ export async function POST(request: Request) {
       data: {
         tanggal: new Date(tanggal),
         produkId: produkId,
-        qty: qty,
-        hargaJual: hargaJualFinal,
-        hpp: hppFinal,
-        profit: profitFinal,
+        qty: Number(qty),
+        hargaJual: Number(hargaJualFinal),
+        hpp: Number(hppFinal),
+        profit: Number(profitFinal),
       },
       include: {
         produk: {
           select: {
+            id: true,
             nama: true,
             sku: true,
           },
