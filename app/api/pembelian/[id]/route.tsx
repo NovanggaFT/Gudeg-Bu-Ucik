@@ -17,6 +17,7 @@ export async function DELETE(
       }, { status: 400 });
     }
 
+    // Ambil data pembelian sebelum dihapus
     const pembelian = await prisma.pembelian.findUnique({
       where: { id },
     });
@@ -28,17 +29,11 @@ export async function DELETE(
       }, { status: 404 });
     }
 
-    if (pembelian.bahanBakuId && pembelian.kategori === 'Bahan Baku') {
-      await prisma.bahanBaku.update({
-        where: { id: pembelian.bahanBakuId },
-        data: {
-          stok: {
-            decrement: pembelian.qty,
-          },
-        },
-      });
-    }
+    // ✅ HAPUS LOGIKA ROLLBACK STOK (karena tidak ada relasi)
+    // Stok bahan baku diupdate melalui pembelianBahanBaku terpisah
+    // Jika perlu rollback, harus di tabel PembelianBahanBaku
 
+    // Hapus data pembelian
     await prisma.pembelian.delete({
       where: { id },
     });
