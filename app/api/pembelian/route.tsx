@@ -1,5 +1,6 @@
 // app/api/pembelian/route.ts - bagian DELETE
 
+import { prisma } from "@/app/lib/prisma";
 import { NextResponse } from "next/server";
 
 export async function DELETE(request: Request) {
