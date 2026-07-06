@@ -2,7 +2,8 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import Swal from 'sweetalert2';
 
 interface AssetItem {
   id: string;
@@ -24,7 +25,7 @@ const formatRupiah = (angka: number) => {
 };
 
 export default function AssetPage() {
-  const [assets] = useState<AssetItem[]>([
+  const [assets, setAssets] = useState<AssetItem[]>([
     {
       id: '1',
       name: 'Biaya Air, Listrik',
@@ -87,6 +88,18 @@ export default function AssetPage() {
     },
   ]);
 
+  const [loading, setLoading] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formData, setFormData] = useState({
+    name: '',
+    category: 'Overhead',
+    quantity: '',
+    price: '',
+    status: 'Baik' as 'Baik' | 'Rusak' | 'Perbaikan',
+  });
+
   const totalAset = assets.reduce((s, i) => s + i.total, 0);
   const totalPerMonth = assets.reduce((s, i) => s + i.perMonth, 0);
 
@@ -99,15 +112,237 @@ export default function AssetPage() {
     }
   };
 
+  // ============================================
+  // CRUD
+  // ============================================
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.name || !formData.quantity || !formData.price) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Data tidak lengkap!',
+        text: 'Nama, Quantity, dan Price wajib diisi',
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    const qty = Number(formData.quantity);
+    const price = Number(formData.price);
+    const total = qty * price;
+    const perMonth = Math.round(total / 12);
+
+    if (editingId) {
+      // UPDATE
+      setAssets(prev => prev.map(item =>
+        item.id === editingId
+          ? {
+              ...item,
+              name: formData.name,
+              category: formData.category,
+              quantity: qty,
+              price: price,
+              total: total,
+              perMonth: perMonth,
+              status: formData.status,
+            }
+          : item
+      ));
+      Swal.fire({
+        icon: 'success',
+        title: '✅ Berhasil!',
+        text: 'Asset berhasil diupdate',
+        timer: 1500,
+        showConfirmButton: false,
+      });
+    } else {
+      // CREATE
+      const newAsset: AssetItem = {
+        id: Date.now().toString(),
+        name: formData.name,
+        category: formData.category,
+        quantity: qty,
+        price: price,
+        total: total,
+        perMonth: perMonth,
+        status: formData.status,
+      };
+      setAssets(prev => [...prev, newAsset]);
+      Swal.fire({
+        icon: 'success',
+        title: '✅ Berhasil!',
+        text: 'Asset berhasil ditambahkan',
+        timer: 1500,
+        showConfirmButton: false,
+      });
+    }
+
+    setShowForm(false);
+    setEditingId(null);
+    setFormData({ name: '', category: 'Overhead', quantity: '', price: '', status: 'Baik' });
+    setIsSubmitting(false);
+  };
+
+  const handleEdit = (item: AssetItem) => {
+    setEditingId(item.id);
+    setFormData({
+      name: item.name,
+      category: item.category,
+      quantity: String(item.quantity),
+      price: String(item.price),
+      status: item.status,
+    });
+    setShowForm(true);
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    const result = await Swal.fire({
+      title: `Hapus ${name}?`,
+      text: "Data akan dihapus permanen!",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      confirmButtonText: 'Ya, hapus!',
+      cancelButtonText: 'Batal'
+    });
+
+    if (result.isConfirmed) {
+      setAssets(prev => prev.filter(item => item.id !== id));
+      Swal.fire({
+        icon: 'success',
+        title: '✅ Berhasil!',
+        timer: 1500,
+        showConfirmButton: false,
+      });
+    }
+  };
+
+  const resetForm = () => {
+    setEditingId(null);
+    setFormData({ name: '', category: 'Overhead', quantity: '', price: '', status: 'Baik' });
+    setShowForm(false);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Memuat data...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
+        {/* Header */}
         <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-800">🏦 Asset & Overhead</h1>
             <p className="text-sm text-gray-400">Kelola aset dan biaya overhead pabrik</p>
           </div>
+          <button
+            onClick={() => { resetForm(); setShowForm(true); }}
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Tambah Asset
+          </button>
         </div>
+
+        {/* Form */}
+        {showForm && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+            <h3 className="text-sm font-semibold text-gray-700 mb-4">
+              {editingId ? '✏️ Edit Asset' : '📝 Tambah Asset'}
+            </h3>
+            <form onSubmit={handleSubmit}>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <input
+                  type="text"
+                  placeholder="Nama Asset"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  required
+                />
+                <select
+                  value={formData.category}
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                >
+                  <option value="Overhead">Overhead</option>
+                  <option value="Peralatan Masak">Peralatan Masak</option>
+                  <option value="Elektronik">Elektronik</option>
+                  <option value="Furniture">Furniture</option>
+                  <option value="Lainnya">Lainnya</option>
+                </select>
+                <input
+                  type="number"
+                  placeholder="Quantity"
+                  value={formData.quantity}
+                  onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  required
+                />
+                <input
+                  type="number"
+                  placeholder="Harga per Unit"
+                  value={formData.price}
+                  onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  required
+                />
+              </div>
+              <div className="mt-4">
+                <select
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value as 'Baik' | 'Rusak' | 'Perbaikan' })}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 w-full md:w-auto"
+                >
+                  <option value="Baik">Baik</option>
+                  <option value="Rusak">Rusak</option>
+                  <option value="Perbaikan">Perbaikan</option>
+                </select>
+              </div>
+              {/* Preview */}
+              {formData.quantity && formData.price && (
+                <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm text-gray-600">
+                  <span className="font-medium">Preview:</span>
+                  {Number(formData.quantity)} × {formatRupiah(Number(formData.price))} = 
+                  <span className="font-bold text-blue-600 ml-1">
+                    {formatRupiah(Number(formData.quantity) * Number(formData.price))}
+                  </span>
+                  <span className="ml-2 text-xs text-gray-400">
+                    (Per Bulan: {formatRupiah(Math.round((Number(formData.quantity) * Number(formData.price)) / 12))})
+                  </span>
+                </div>
+              )}
+              <div className="flex gap-3 mt-4">
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm transition-colors disabled:opacity-50"
+                >
+                  {isSubmitting ? '⏳ Menyimpan...' : 'Simpan'}
+                </button>
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="px-4 py-2 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 text-sm"
+                >
+                  Batal
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -137,10 +372,11 @@ export default function AssetPage() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Nama</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Kategori</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Qty</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Harga/Bulan</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Harga/Unit</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Total</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Per Bulan</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-400 uppercase">Aksi</th>
                 </tr>
               </thead>
               <tbody>
@@ -160,6 +396,20 @@ export default function AssetPage() {
                       <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(item.status)}`}>
                         {item.status}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        onClick={() => handleEdit(item)}
+                        className="p-1 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        onClick={() => handleDelete(item.id, item.name)}
+                        className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors ml-1"
+                      >
+                        🗑️
+                      </button>
                     </td>
                   </tr>
                 ))}

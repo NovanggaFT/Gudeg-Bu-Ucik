@@ -171,3 +171,25 @@ model Asset {
   @@index([category])
   @@index([status])
 }
+
+// 9. Pembelian
+model Pembelian {
+  id          String   @id @default(cuid())
+  tanggal     DateTime @default(now())
+  kategori    String   // "Bahan Baku", "Operasional", "Gaji", "Overhead"
+  nama        String   // Nama item (Bahan baku, Gas, Retribusi, dll)
+  detail      String?  // Detail tambahan (10 Tabung, dll)
+  qty         Float    @default(0)
+  harga       Int      @default(0)
+  total       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // ✅ HAPUS INI:
+  // bahanBakuId String?
+  // bahanBaku   BahanBaku? @relation(...)
+
+  @@index([tanggal])
+  @@index([kategori])
+  @@index([nama])
+}

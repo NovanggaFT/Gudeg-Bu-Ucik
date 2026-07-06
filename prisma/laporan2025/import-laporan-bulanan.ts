@@ -12,8 +12,8 @@ const pool = new Pool({
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
-// Total Overhead per tahun = 140.446.771
-const OVERHEAD_PER_BULAN = Math.round(140446771 / 12);
+// Total Overhead per tahun = 136.706.771
+const OVERHEAD_PER_BULAN = Math.round(136706771 / 12);
 
 // ✅ HARI KERJA PER BULAN (TANPA LIBUR MINGGU & NASIONAL)
 const HARI_KERJA_PER_BULAN: Record<string, number> = {
