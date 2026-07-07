@@ -12,46 +12,45 @@ const pool = new Pool({
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
-// ✅ HARGA 0, STOK 0, STOK MINIMAL 0
-// Harga akan diisi dari pembelian bahan baku
+// ✅ HARGA PER SATUAN TERKECIL
 const bahanBakuData = [
-  { nama: 'Ajinomoto', satuan: 'g' },
-  { nama: 'Asem', satuan: 'g' },
-  { nama: 'Ayam', satuan: 'g' },
-  { nama: 'Bawang Merah', satuan: 'g' },
-  { nama: 'Bawang Putih', satuan: 'g' },
-  { nama: 'Cabai Merah', satuan: 'g' },
-  { nama: 'Cabai Rawit', satuan: 'g' },
-  { nama: 'Daun Bawang', satuan: 'g' },
-  { nama: 'Daun Salam', satuan: 'Lbr' },
-  { nama: 'Garam', satuan: 'g' },
-  { nama: 'Gula Merah', satuan: 'g' },
-  { nama: 'Gula Putih', satuan: 'g' },
-  { nama: 'Kelapa', satuan: 'g' },
-  { nama: 'Kemiri', satuan: 'g' },
-  { nama: 'Kentang', satuan: 'g' },
-  { nama: 'Ketumbar', satuan: 'g' },
-  { nama: 'Krecek Rambak', satuan: 'g' },
-  { nama: 'Kubis Sayur', satuan: 'g' },
-  { nama: 'Kunyit', satuan: 'g' },
-  { nama: 'Lada', satuan: 'g' },
-  { nama: 'Lengkuas', satuan: 'g' },
-  { nama: 'Mie Sealon', satuan: 'g' },
-  { nama: 'Nangka Muda', satuan: 'g' },
-  { nama: 'Royco', satuan: 'g' },
-  { nama: 'Tahu', satuan: 'g' },
-  { nama: 'Telur', satuan: 'g' },
-  { nama: 'Terasi', satuan: 'g' },
-  { nama: 'Tomat', satuan: 'g' },
-  { nama: 'Wortel', satuan: 'g' },
-  { nama: 'Nasi', satuan: 'g' },
-  { nama: 'Kecap', satuan: 'ml' },
+  // Bumbu Dapur
+  { nama: 'Ajinomoto', satuan: 'g', harga: 53 }, // 2.650/50g = 53/g
+  { nama: 'Asem', satuan: 'g', harga: 25 }, // 25.000/kg = 25/g
+  { nama: 'Bawang Merah', satuan: 'g', harga: 35 }, // 35.000/kg = 35/g
+  { nama: 'Bawang Putih', satuan: 'g', harga: 25 }, // 25.000/kg = 25/g
+  { nama: 'Cabai Merah', satuan: 'g', harga: 50 }, // 50.000/kg = 50/g
+  { nama: 'Cabai Rawit', satuan: 'g', harga: 57 }, // 57.000/kg = 57/g
+  { nama: 'Daun Bawang', satuan: 'g', harga: 9 }, // 9.000/kg = 9/g
+  { nama: 'Daun Salam', satuan: 'Lbr', harga: 150 }, // 1.500/10lbr = 150/lbr
+  { nama: 'Garam', satuan: 'g', harga: 0.25 }, // 250/kg = 0.25/g
+  { nama: 'Gula Merah', satuan: 'g', harga: 14 }, // 14.000/kg = 14/g
+  { nama: 'Gula Putih', satuan: 'g', harga: 17 }, // 17.000/kg = 17/g
+  { nama: 'Kelapa', satuan: 'g', harga: 12 }, // 12.000/kg = 12/g
+  { nama: 'Kemiri', satuan: 'g', harga: 45 }, // 45.000/kg = 45/g
+  { nama: 'Kentang', satuan: 'g', harga: 12 }, // 12.000/kg = 12/g
+  { nama: 'Ketumbar', satuan: 'g', harga: 45 }, // 45.000/kg = 45/g
+  { nama: 'Krecek Rambak', satuan: 'g', harga: 100 }, // 100.000/kg = 100/g
+  { nama: 'Kubis Sayur', satuan: 'g', harga: 8 }, // 8.000/kg = 8/g
+  { nama: 'Kunyit', satuan: 'g', harga: 10 }, // 10.000/kg = 10/g
+  { nama: 'Lada', satuan: 'g', harga: 205 }, // 205.000/kg = 205/g
+  { nama: 'Lengkuas', satuan: 'g', harga: 8 }, // 8.000/kg = 8/g
+  { nama: 'Mie Sealon', satuan: 'g', harga: 10 }, // 10.000/kg = 10/g
+  { nama: 'Nangka Muda', satuan: 'g', harga: 10 }, // 10.000/kg = 10/g
+  { nama: 'Royco', satuan: 'g', harga: 4.17 }, // 417/100g = 4.17/g
+  { nama: 'Tahu', satuan: 'g', harga: 0.5 }, // 500/kg = 0.5/g
+  { nama: 'Telur', satuan: 'g', harga: 23.5 }, // 23.500/kg = 23.5/g
+  { nama: 'Terasi', satuan: 'g', harga: 45 }, // 45.000/kg = 45/g
+  { nama: 'Tomat', satuan: 'g', harga: 10 }, // 10.000/kg = 10/g
+  { nama: 'Wortel', satuan: 'g', harga: 10 }, // 10.000/kg = 10/g
+  { nama: 'Nasi', satuan: 'g', harga: 16 }, // 16.000/kg = 16/g
+  { nama: 'Ayam', satuan: 'g', harga: 50 }, // 50.000/kg = 50/g
+  { nama: 'Kecap', satuan: 'ml', harga: 27.37 }, // 26.000/950ml = 27.37/ml
 ];
 
 async function main() {
   console.log('🌱 Seeding bahan baku...');
-  console.log('📦 Harga = 0, Stok = 0, Stok Minimal = 0');
-  console.log('💡 Harga akan diisi dari pembelian bahan baku');
+  console.log('📦 Harga dalam satuan terkecil (g, ml, lbr)');
 
   await prisma.bahanBaku.deleteMany();
   console.log('🗑️ Data lama dihapus');
@@ -61,12 +60,12 @@ async function main() {
       data: {
         nama: data.nama,
         satuan: data.satuan,
-        harga: 0,        // ✅ Akan diisi dari pembelian
-        stok: 0,         // ✅ Akan bertambah dari pembelian
-        stokMinimal: 0,  // ✅ Nanti dihitung dari produk
+        harga: Math.round(data.harga * 1000) / 1000,
+        stok: 0,
+        stokMinimal: 0,
       },
     });
-    console.log(`✅ ${data.nama} (${data.satuan}) - harga: Rp0, stok: 0`);
+    console.log(`✅ ${data.nama} (${data.satuan}) - Rp${data.harga}/${data.satuan}`);
   }
 
   console.log(`✅ Total ${bahanBakuData.length} bahan baku berhasil di-seed`);

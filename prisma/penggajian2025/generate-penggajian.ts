@@ -12,7 +12,7 @@ const KARYAWAN = [
   { nama: 'Aziz', posisi: 'Seller', gaji: 50000 },
 ];
 
-// ✅ HANYA LIBUR YANG KAMU MINTA (tanpa Minggu & tanpa hari nasional)
+// ✅ DAFTAR LIBUR (tanggal saja)
 const LIBUR: string[] = [];
 
 // 1 Maret - 15 Maret 2025
@@ -20,17 +20,17 @@ for (let d = 1; d <= 15; d++) {
   LIBUR.push(`2025-03-${String(d).padStart(2, '0')}`);
 }
 
-// 19 April - 22 April 2025
-for (let d = 19; d <= 22; d++) {
+// 19 Maret 2025 (diperbaiki)
+LIBUR.push(`2025-03-19`);
+
+// 1 April - 3 April 2025
+for (let d = 1; d <= 3; d++) {
   LIBUR.push(`2025-04-${String(d).padStart(2, '0')}`);
 }
 
-// 30 April - 3 Mei 2025
-for (let d = 30; d <= 30; d++) {
+// 19 April - 22 April 2025
+for (let d = 19; d <= 22; d++) {
   LIBUR.push(`2025-04-${String(d).padStart(2, '0')}`);
-}
-for (let d = 1; d <= 3; d++) {
-  LIBUR.push(`2025-05-${String(d).padStart(2, '0')}`);
 }
 
 // 19 Oktober - 22 Oktober 2025
@@ -39,6 +39,7 @@ for (let d = 19; d <= 22; d++) {
 }
 
 console.log(`📅 Total hari libur: ${LIBUR.length} hari`);
+console.log('📅 Daftar libur:', LIBUR.sort());
 
 function isLibur(dateStr: string): boolean {
   return LIBUR.includes(dateStr);
@@ -46,15 +47,21 @@ function isLibur(dateStr: string): boolean {
 
 function generateCSV() {
   const rows = ['nama,posisi,gaji,tanggal_penggajian'];
-  const startDate = new Date(2025, 0, 1);
-  const endDate = new Date(2026, 0, 1);
+  
+  // Menggunakan GMT+7 (WIB)
+  const startDate = new Date('2025-01-01T00:00:00+07:00');
+  const endDate = new Date('2026-01-01T00:00:00+07:00');
   let currentDate = new Date(startDate);
   let totalHariKerja = 0;
 
-  while (currentDate <= endDate) {
-    const dateStr = currentDate.toISOString().split('T')[0];
+  while (currentDate < endDate) {
+    // Format tanggal dengan GMT+7
+    const year = currentDate.getFullYear();
+    const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+    const day = String(currentDate.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
     
-    // ✅ HANYA SKIP LIBUR YANG KAMU MINTA (tanpa Minggu)
+    // Cek apakah hari libur (tanpa skip Minggu)
     if (!isLibur(dateStr)) {
       for (const k of KARYAWAN) {
         rows.push(`${k.nama},${k.posisi},${k.gaji},${dateStr}`);

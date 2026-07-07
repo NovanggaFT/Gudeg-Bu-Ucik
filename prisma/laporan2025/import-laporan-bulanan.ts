@@ -25,9 +25,9 @@ console.log(`📊 Sisa overhead untuk Desember: Rp${SISA_OVERHEAD.toLocaleString
 const HARI_KERJA_PER_BULAN: Record<string, number> = {
   'Januari 2025': 31,
   'Februari 2025': 28,
-  'Maret 2025': 16,
-  'April 2025': 25,
-  'Mei 2025': 28,
+  'Maret 2025': 15,
+  'April 2025': 23,
+  'Mei 2025': 31,
   'Juni 2025': 30,
   'Juli 2025': 31,
   'Agustus 2025': 31,

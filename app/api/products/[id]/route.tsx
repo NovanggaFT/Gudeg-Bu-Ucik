@@ -1,36 +1,25 @@
 // app/api/products/[id]/route.ts
 
-import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
+import { NextResponse } from 'next/server';
 
-// GET: Detail produk + bahan baku (untuk view resep)
 export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  request: Request,
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = await params;
-
-    const product = await prisma.produk.findUnique({
-      where: { id },
+    const produk = await prisma.produk.findUnique({
+      where: { id: params.id },
       include: {
         bahanBaku: {
           include: {
-            bahanBaku: {
-              select: {
-                id: true,
-                nama: true,
-                satuan: true,
-                harga: true,
-                stok: true,
-              },
-            },
+            bahanBaku: true,
           },
         },
       },
     });
 
-    if (!product) {
+    if (!produk) {
       return NextResponse.json({
         status: '❌ GAGAL',
         error: 'Produk tidak ditemukan',
@@ -39,10 +28,10 @@ export async function GET(
 
     return NextResponse.json({
       status: '✅ Berhasil!',
-      data: product,
+      data: produk,
     });
   } catch (error: any) {
-    console.error('Error fetching product detail:', error);
+    console.error('Error fetching product:', error);
     return NextResponse.json({
       status: '❌ GAGAL',
       error: error.message,
@@ -50,31 +39,83 @@ export async function GET(
   }
 }
 
-// PUT: Update produk
 export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  request: Request,
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = await params;
     const body = await request.json();
-    const { nama, sku, hpp, hargaJual, targetStok, isActive } = body;
+    const { nama, sku, hpp, hargaJual, targetStok, resep } = body;
 
-    const product = await prisma.produk.update({
-      where: { id },
-      data: {
-        nama,
+    // Validasi
+    if (!nama || !sku || !hpp || !hargaJual) {
+      return NextResponse.json({
+        status: '❌ GAGAL',
+        error: 'Semua field wajib diisi',
+      }, { status: 400 });
+    }
+
+    // Cek SKU duplikat (kecuali dirinya sendiri)
+    const existing = await prisma.produk.findFirst({
+      where: {
         sku,
-        hpp: Number(hpp),
-        hargaJual: Number(hargaJual),
-        targetStok: Number(targetStok) || 0,
-        isActive: isActive !== undefined ? isActive : true,
+        NOT: { id: params.id },
       },
+    });
+
+    if (existing) {
+      return NextResponse.json({
+        status: '❌ GAGAL',
+        error: `SKU "${sku}" sudah digunakan`,
+      }, { status: 400 });
+    }
+
+    // Update produk dan resep
+    const produk = await prisma.$transaction(async (tx) => {
+      // Update produk
+      const updated = await tx.produk.update({
+        where: { id: params.id },
+        data: {
+          nama,
+          sku,
+          hpp: Number(hpp),
+          hargaJual: Number(hargaJual),
+          targetStok: Number(targetStok) || 0,
+        },
+      });
+
+      // Hapus resep lama
+      await tx.produkBahanBaku.deleteMany({
+        where: { produkId: params.id },
+      });
+
+      // Create resep baru
+      if (resep && resep.length > 0) {
+        await tx.produkBahanBaku.createMany({
+          data: resep.map((item: any) => ({
+            produkId: params.id,
+            bahanBakuId: item.bahanBakuId,
+            qty: Number(item.qty),
+          })),
+        });
+      }
+
+      // Return produk dengan resep
+      return await tx.produk.findUnique({
+        where: { id: params.id },
+        include: {
+          bahanBaku: {
+            include: {
+              bahanBaku: true,
+            },
+          },
+        },
+      });
     });
 
     return NextResponse.json({
       status: '✅ Berhasil!',
-      data: product,
+      data: produk,
     });
   } catch (error: any) {
     console.error('Error updating product:', error);
@@ -85,16 +126,14 @@ export async function PUT(
   }
 }
 
-// DELETE: Hapus produk
 export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  request: Request,
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = await params;
-
+    // Hapus resep dulu (cascade otomatis)
     await prisma.produk.delete({
-      where: { id },
+      where: { id: params.id },
     });
 
     return NextResponse.json({
