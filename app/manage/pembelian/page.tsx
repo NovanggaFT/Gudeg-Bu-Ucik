@@ -13,17 +13,17 @@ interface BahanBaku {
   stok: number;
 }
 
-interface Pembelian {
+interface PembelianItem {
   id: string;
   tanggal: string;
-  kategori: string;
   nama: string;
   detail: string | null;
   qty: number;
   harga: number;
   total: number;
-  bahanBakuId: string | null;
-  bahanBaku?: BahanBaku | null;
+  source: 'bahan_baku' | 'reguler';
+  satuan?: string;
+  bahanBaku?: any;
 }
 
 const formatRupiah = (angka: number) => {
@@ -35,29 +35,28 @@ const formatRupiah = (angka: number) => {
 };
 
 export default function PembelianPage() {
-  const [data, setData] = useState<Pembelian[]>([]);
-  const [filteredData, setFilteredData] = useState<Pembelian[]>([]);
+  const [data, setData] = useState<PembelianItem[]>([]);
+  const [filteredData, setFilteredData] = useState<PembelianItem[]>([]);
   const [bahanList, setBahanList] = useState<BahanBaku[]>([]);
   const [filterMonth, setFilterMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
-  const [filterKategori, setFilterKategori] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     tanggal: new Date().toISOString().split('T')[0],
-    kategori: 'Bahan Baku',
     nama: '',
     detail: '',
     qty: '',
     harga: '',
+    isBahanBaku: false,
+    bahanBakuId: '',
   });
 
-  // ✅ Ambil bahan baku untuk dropdown
+  // Fetch bahan baku
   const fetchBahan = async () => {
     try {
       const res = await fetch('/api/bahan-baku');
@@ -70,11 +69,11 @@ export default function PembelianPage() {
     }
   };
 
-  // ✅ Ambil data pembelian
   const fetchData = async () => {
     try {
       setLoading(true);
       setError(null);
+      
       const res = await fetch('/api/pembelian');
       
       if (!res.ok) {
@@ -85,12 +84,15 @@ export default function PembelianPage() {
       
       if (result.status === '✅ Berhasil!') {
         setData(result.data);
-        applyFilters(result.data, filterMonth, filterKategori);
+        applyFilters(result.data, filterMonth);
+        console.log(`✅ Total data: ${result.data.length}`);
+        console.log(`   - Bahan Baku: ${result.metadata?.fromBahanBaku || 0}`);
+        console.log(`   - Reguler: ${result.metadata?.fromReguler || 0}`);
       } else {
         throw new Error(result.error || 'Gagal mengambil data');
       }
     } catch (err: any) {
-      console.error('Error fetching data:', err);
+      console.error('❌ Error:', err);
       setError(err.message);
       setData([]);
       setFilteredData([]);
@@ -104,50 +106,64 @@ export default function PembelianPage() {
     fetchData();
   }, []);
 
-  const applyFilters = (dataSource: Pembelian[], month: string, kategori: string) => {
+  const applyFilters = (dataSource: PembelianItem[], month: string) => {
     let filtered = dataSource;
-
     if (month) {
       filtered = filtered.filter((item) => item.tanggal.startsWith(month));
     }
-
-    if (kategori !== 'all') {
-      filtered = filtered.filter((item) => item.kategori === kategori);
-    }
-
     setFilteredData(filtered);
   };
 
-  const handleFilterChange = (month: string, kategori: string) => {
+  const handleFilterChange = (month: string) => {
     setFilterMonth(month);
-    setFilterKategori(kategori);
-    applyFilters(data, month, kategori);
+    applyFilters(data, month);
   };
 
-  // ✅ Auto-fill harga saat bahan baku dipilih
+  // Handle form
   const handleBahanChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const nama = e.target.value;
-    setFormData({ ...formData, nama, harga: '' });
+    const id = e.target.value;
     
-    if (nama) {
-      const selected = bahanList.find(b => b.nama === nama);
+    if (id) {
+      const selected = bahanList.find(b => b.id === id);
       if (selected) {
-        setFormData(prev => ({ ...prev, nama, harga: String(selected.harga) }));
+        setFormData({
+          ...formData,
+          bahanBakuId: id,
+          nama: selected.nama,
+          harga: String(selected.harga),
+          isBahanBaku: true,
+        });
       }
+    } else {
+      setFormData({
+        ...formData,
+        bahanBakuId: '',
+        nama: '',
+        harga: '',
+        isBahanBaku: false,
+      });
     }
   };
 
-  // ============================================
-  // CRUD
-  // ============================================
+  const handleNamaInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setFormData({
+      ...formData,
+      nama: value,
+      isBahanBaku: false,
+      bahanBakuId: '',
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.tanggal || !formData.kategori || !formData.nama || !formData.qty || !formData.harga) {
+    if (!formData.tanggal || !formData.nama || !formData.qty || !formData.harga) {
       Swal.fire({
         icon: 'warning',
         title: 'Data tidak lengkap!',
         text: 'Semua field wajib diisi',
+        confirmButtonText: 'OK',
       });
       return;
     }
@@ -156,72 +172,117 @@ export default function PembelianPage() {
     const hargaNum = Number(formData.harga);
 
     if (isNaN(qtyNum) || qtyNum <= 0) {
-      Swal.fire({ icon: 'warning', title: 'Qty tidak valid!', text: 'Qty harus lebih dari 0' });
+      Swal.fire({ 
+        icon: 'warning', 
+        title: 'Qty tidak valid!', 
+        text: 'Qty harus lebih dari 0',
+        confirmButtonText: 'OK',
+      });
       return;
     }
 
     if (isNaN(hargaNum) || hargaNum <= 0) {
-      Swal.fire({ icon: 'warning', title: 'Harga tidak valid!', text: 'Harga harus lebih dari 0' });
+      Swal.fire({ 
+        icon: 'warning', 
+        title: 'Harga tidak valid!', 
+        text: 'Harga harus lebih dari 0',
+        confirmButtonText: 'OK',
+      });
       return;
     }
 
     setIsSubmitting(true);
-    const total = qtyNum * hargaNum;
 
     try {
-      const url = editingId ? `/api/pembelian/${editingId}` : '/api/pembelian';
-      const method = editingId ? 'PUT' : 'POST';
-      
-      // Cari bahan baku ID jika kategori = Bahan Baku
-      let bahanBakuId = null;
-      if (formData.kategori === 'Bahan Baku') {
-        const selected = bahanList.find(b => b.nama === formData.nama);
-        bahanBakuId = selected?.id || null;
+      const payload: any = {
+        tanggal: formData.tanggal,
+        nama: formData.nama,
+        detail: formData.detail || null,
+        qty: qtyNum,
+        harga: hargaNum,
+        total: qtyNum * hargaNum,
+        isBahanBaku: formData.isBahanBaku,
+      };
+
+      if (formData.isBahanBaku && formData.bahanBakuId) {
+        payload.bahanBakuId = formData.bahanBakuId;
       }
 
-      const res = await fetch(url, {
-        method,
+      const res = await fetch('/api/pembelian', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tanggal: formData.tanggal,
-          kategori: formData.kategori,
-          nama: formData.nama,
-          detail: formData.detail || null,
-          qty: qtyNum,
-          harga: hargaNum,
-          total: total,
-          bahanBakuId: bahanBakuId,
-        }),
+        body: JSON.stringify(payload),
       });
       
       const result = await res.json();
       
       if (result.status === '✅ Berhasil!') {
         setShowForm(false);
-        setEditingId(null);
-        setFormData({ tanggal: new Date().toISOString().split('T')[0], kategori: 'Bahan Baku', nama: '', detail: '', qty: '', harga: '' });
+        setFormData({
+          tanggal: new Date().toISOString().split('T')[0],
+          nama: '',
+          detail: '',
+          qty: '',
+          harga: '',
+          isBahanBaku: false,
+          bahanBakuId: '',
+        });
         await fetchData();
-        await fetchBahan(); // refresh stok
+        await fetchBahan();
+        
+        // Update Laporan Bulanan
+        await updateLaporanBulanan(formData.tanggal);
+        
         Swal.fire({
           icon: 'success',
           title: '✅ Berhasil!',
-          text: editingId ? 'Pembelian berhasil diupdate' : 'Pembelian berhasil ditambahkan',
+          text: result.message || 'Pembelian berhasil ditambahkan',
           timer: 1500,
           showConfirmButton: false,
         });
       } else {
-        Swal.fire({ icon: 'error', title: 'Gagal!', text: result.error || 'Gagal menyimpan data' });
+        Swal.fire({ 
+          icon: 'error', 
+          title: 'Gagal!', 
+          text: result.error || 'Gagal menyimpan data',
+          confirmButtonText: 'OK',
+        });
       }
     } catch (error: any) {
-      Swal.fire({ icon: 'error', title: 'Error!', text: error.message || 'Terjadi kesalahan' });
+      console.error('❌ Submit error:', error);
+      Swal.fire({ 
+        icon: 'error', 
+        title: 'Error!', 
+        text: error.message || 'Terjadi kesalahan',
+        confirmButtonText: 'OK',
+      });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleDelete = async (id: string, nama: string) => {
+  // Update Laporan Bulanan
+  const updateLaporanBulanan = async (tanggal: string) => {
+    try {
+      const bulan = new Date(tanggal);
+      const bulanStr = `${bulan.getFullYear()}-${String(bulan.getMonth() + 1).padStart(2, '0')}`;
+      
+      const res = await fetch('/api/laporan-bulanan/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bulan: bulanStr }),
+      });
+      
+      const result = await res.json();
+      console.log('📊 Laporan Bulanan updated:', result);
+    } catch (error) {
+      console.error('❌ Error updating laporan bulanan:', error);
+    }
+  };
+
+  const handleDelete = async (id: string, nama: string, source: string, tanggal: string) => {
     const result = await Swal.fire({
-      title: `Hapus pembelian ${nama}?`,
+      title: `Hapus ${nama}?`,
       text: "Data akan dihapus permanen!",
       icon: 'warning',
       showCancelButton: true,
@@ -235,7 +296,11 @@ export default function PembelianPage() {
         const res = await fetch(`/api/pembelian/${id}`, { method: 'DELETE' });
         if (res.ok) {
           await fetchData();
-          await fetchBahan(); // refresh stok
+          await fetchBahan();
+          
+          // Update Laporan Bulanan
+          await updateLaporanBulanan(tanggal);
+          
           Swal.fire({ icon: 'success', title: '✅ Berhasil!', timer: 1500, showConfirmButton: false });
         } else {
           throw new Error('Gagal menghapus');
@@ -246,25 +311,11 @@ export default function PembelianPage() {
     }
   };
 
-  const handleEdit = (item: Pembelian) => {
-    setEditingId(item.id);
-    setFormData({
-      tanggal: item.tanggal.split('T')[0],
-      kategori: item.kategori,
-      nama: item.nama,
-      detail: item.detail || '',
-      qty: String(item.qty),
-      harga: String(item.harga),
-    });
-    setShowForm(true);
-  };
-
   // Statistik
   const totalQty = filteredData.reduce((sum, item) => sum + (item.qty || 0), 0);
   const totalBiaya = filteredData.reduce((sum, item) => sum + (item.total || 0), 0);
-  const totalBahanBaku = filteredData.filter(item => item.kategori === 'Bahan Baku').reduce((sum, item) => sum + (item.total || 0), 0);
-  const totalOperasional = filteredData.filter(item => item.kategori === 'Operasional').reduce((sum, item) => sum + (item.total || 0), 0);
-  const uniqueKategori = [...new Set(filteredData.map(item => item.kategori))];
+  const fromBahanBaku = filteredData.filter(d => d.source === 'bahan_baku').length;
+  const fromReguler = filteredData.filter(d => d.source === 'reguler').length;
 
   if (loading) {
     return (
@@ -282,7 +333,10 @@ export default function PembelianPage() {
       <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
         <div className="bg-white rounded-2xl shadow-sm border border-red-200 p-8 max-w-md text-center">
           <p className="text-red-500 text-lg">❌ {error}</p>
-          <button onClick={fetchData} className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
+          <button 
+            onClick={fetchData} 
+            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+          >
             Coba Lagi
           </button>
         </div>
@@ -293,34 +347,45 @@ export default function PembelianPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
+        {/* Header */}
         <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">🛒 Management Pembelian</h1>
-            <p className="text-sm text-gray-500">Kelola data pembelian</p>
+            <h1 className="text-2xl font-bold text-gray-900">🛒 Pembelian</h1>
+            <p className="text-sm text-gray-500">
+              Total: {data.length} data
+            </p>
           </div>
-          <button
-            onClick={() => { setShowForm(!showForm); setEditingId(null); }}
-            disabled={isSubmitting}
-            className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center gap-2 disabled:opacity-50"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Tambah Pembelian
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={fetchData}
+              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center gap-2"
+            >
+              🔄 Refresh
+            </button>
+            <button
+              onClick={() => setShowForm(!showForm)}
+              disabled={isSubmitting}
+              className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center gap-2 disabled:opacity-50"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Tambah Pembelian
+            </button>
+          </div>
         </div>
 
         {/* Form Tambah */}
         {showForm && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
-            <h3 className="text-sm font-semibold text-gray-700 mb-4">
-              {editingId ? '✏️ Edit Pembelian' : '📝 Tambah Pembelian'}
-            </h3>
+            <h3 className="text-sm font-semibold text-gray-700 mb-4">📝 Tambah Pembelian</h3>
             <form onSubmit={handleSubmit}>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Tanggal */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Tanggal</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Tanggal <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="date"
                     value={formData.tanggal}
@@ -330,78 +395,83 @@ export default function PembelianPage() {
                   />
                 </div>
 
-                {/* Kategori */}
+                {/* Nama Item */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Kategori</label>
-                  <select
-                    value={formData.kategori}
-                    onChange={(e) => setFormData({ ...formData, kategori: e.target.value, nama: '', harga: '' })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                  >
-                    <option value="Bahan Baku">Bahan Baku</option>
-                    <option value="Operasional">Operasional</option>
-                    <option value="Gaji">Gaji</option>
-                    <option value="Overhead">Overhead</option>
-                  </select>
-                </div>
-
-                {/* Nama (dropdown untuk Bahan Baku, input untuk lainnya) */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Nama</label>
-                  {formData.kategori === 'Bahan Baku' ? (
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Nama Item <span className="text-red-500">*</span>
+                  </label>
+                  <div className="space-y-2">
                     <select
-                      value={formData.nama}
+                      value={formData.isBahanBaku ? formData.bahanBakuId : ''}
                       onChange={handleBahanChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                      required
                     >
-                      <option value="">Pilih Bahan</option>
+                      <option value="">Pilih dari daftar bahan baku</option>
                       {bahanList.map((b) => (
-                        <option key={b.id} value={b.nama}>
-                          {b.nama} ({b.satuan}) - {formatRupiah(b.harga)}
+                        <option key={b.id} value={b.id}>
+                          {b.nama} ({b.satuan}) - Stok: {b.stok} | {formatRupiah(b.harga)}
                         </option>
                       ))}
                     </select>
-                  ) : (
-                    <input
-                      type="text"
-                      placeholder="Nama item"
-                      value={formData.nama}
-                      onChange={(e) => setFormData({ ...formData, nama: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                      required
-                    />
-                  )}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-400">atau input manual:</span>
+                      <input
+                        type="text"
+                        placeholder="Nama item (Gas, Listrik, dll)"
+                        value={!formData.isBahanBaku ? formData.nama : ''}
+                        onChange={handleNamaInputChange}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 {/* Qty */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Qty</label>
-                  <input
-                    type="number"
-                    placeholder="Jumlah"
-                    value={formData.qty}
-                    onChange={(e) => setFormData({ ...formData, qty: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                    required
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Qty <span className="text-red-500">*</span>
+                    {formData.isBahanBaku && formData.bahanBakuId && (
+                      <span className="text-xs text-gray-400 ml-1">
+                        ({bahanList.find(b => b.id === formData.bahanBakuId)?.satuan})
+                      </span>
+                    )}
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      placeholder="Jumlah"
+                      value={formData.qty}
+                      onChange={(e) => setFormData({ ...formData, qty: e.target.value })}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                      required
+                      min="0.001"
+                      step="0.001"
+                    />
+                    {formData.isBahanBaku && formData.bahanBakuId && (
+                      <span className="text-sm text-gray-500 min-w-[40px]">
+                        {bahanList.find(b => b.id === formData.bahanBakuId)?.satuan}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Harga */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Harga
-                    {formData.kategori === 'Bahan Baku' && (
+                    Harga <span className="text-red-500">*</span>
+                    {formData.isBahanBaku && formData.bahanBakuId && (
                       <span className="text-xs text-gray-400 ml-1">(auto-fill)</span>
                     )}
                   </label>
                   <input
                     type="number"
-                    placeholder="Harga"
+                    placeholder="Harga per satuan"
                     value={formData.harga}
                     onChange={(e) => setFormData({ ...formData, harga: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
                     required
+                    min="1"
+                    step="1"
                   />
                 </div>
 
@@ -420,29 +490,56 @@ export default function PembelianPage() {
               
               {/* Preview */}
               {formData.qty && formData.harga && (
-                <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm text-gray-600">
-                  <span className="font-medium">Preview:</span>
-                  {Number(formData.qty)} × {formatRupiah(Number(formData.harga))} = 
-                  <span className="font-bold text-blue-600 ml-1">
-                    {formatRupiah(Number(formData.qty) * Number(formData.harga))}
-                  </span>
+                <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex flex-wrap justify-between items-center gap-2">
+                    <span className="text-sm text-gray-600 font-medium">📊 Preview:</span>
+                    <div className="flex flex-wrap items-center gap-4 text-sm">
+                      <span>
+                        {Number(formData.qty)} × {formatRupiah(Number(formData.harga))}
+                      </span>
+                      <span className="text-gray-400">=</span>
+                      <span className="font-bold text-blue-600 text-base">
+                        {formatRupiah(Number(formData.qty) * Number(formData.harga))}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               )}
 
-              <div className="flex gap-3 mt-4">
+              {/* Info Stok */}
+              {formData.isBahanBaku && formData.bahanBakuId && formData.qty && (
+                <div className="mt-3 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                  <div className="flex items-center gap-2 text-sm text-yellow-700">
+                    <span>ℹ️</span>
+                    <span>
+                      Stok akan bertambah <strong>{Number(formData.qty)}</strong>{' '}
+                      {bahanList.find(b => b.id === formData.bahanBakuId)?.satuan}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-3 mt-4 pt-4 border-t border-gray-200">
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm transition-colors disabled:opacity-50"
+                  className="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm transition-colors disabled:opacity-50 flex items-center gap-2"
                 >
-                  {isSubmitting ? '⏳ Menyimpan...' : 'Simpan'}
+                  {isSubmitting ? (
+                    <>
+                      <span className="animate-spin">⏳</span>
+                      Menyimpan...
+                    </>
+                  ) : (
+                    '💾 Simpan'
+                  )}
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setShowForm(false); setEditingId(null); }}
-                  className="px-4 py-2 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 text-sm"
+                  onClick={() => { setShowForm(false); }}
+                  className="px-6 py-2 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 text-sm"
                 >
-                  Batal
+                  ❌ Batal
                 </button>
               </div>
             </form>
@@ -452,26 +549,12 @@ export default function PembelianPage() {
         {/* Filter */}
         <div className="flex flex-wrap items-center gap-4 mb-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <label className="text-sm text-gray-600 font-medium">📅 Filter:</label>
-          
           <input
             type="month"
             value={filterMonth}
-            onChange={(e) => handleFilterChange(e.target.value, filterKategori)}
-            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 bg-white cursor-pointer min-w-[180px]"
+            onChange={(e) => handleFilterChange(e.target.value)}
+            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white cursor-pointer min-w-[180px]"
           />
-          
-          <select
-            value={filterKategori}
-            onChange={(e) => handleFilterChange(filterMonth, e.target.value)}
-            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 bg-white min-w-[150px]"
-          >
-            <option value="all">📋 Semua Kategori</option>
-            <option value="Bahan Baku">📦 Bahan Baku</option>
-            <option value="Operasional">⚙️ Operasional</option>
-            <option value="Gaji">👨‍💼 Gaji</option>
-            <option value="Overhead">🏦 Overhead</option>
-          </select>
-          
           <span className="text-xs text-gray-400 ml-auto">
             📊 {filteredData.length} data
           </span>
@@ -480,21 +563,22 @@ export default function PembelianPage() {
         {/* Statistik */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-2xl p-4 text-white">
-            <p className="text-sm opacity-80">Total Qty</p>
-            <p className="text-2xl font-bold">{totalQty}</p>
-            <p className="text-xs opacity-70 mt-1">{uniqueKategori.length} kategori</p>
+            <p className="text-sm opacity-80">Total Data</p>
+            <p className="text-2xl font-bold">{filteredData.length}</p>
           </div>
           <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-2xl p-4 text-white">
+            <p className="text-sm opacity-80">Total Qty</p>
+            <p className="text-2xl font-bold">{totalQty}</p>
+          </div>
+          <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-2xl p-4 text-white">
             <p className="text-sm opacity-80">Total Biaya</p>
             <p className="text-2xl font-bold">{formatRupiah(totalBiaya)}</p>
           </div>
-          <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-2xl p-4 text-white">
-            <p className="text-sm opacity-80">Total Bahan Baku</p>
-            <p className="text-2xl font-bold">{formatRupiah(totalBahanBaku)}</p>
-          </div>
           <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl p-4 text-white">
-            <p className="text-sm opacity-80">Total Operasional</p>
-            <p className="text-2xl font-bold">{formatRupiah(totalOperasional)}</p>
+            <p className="text-sm opacity-80">Sumber Data</p>
+            <p className="text-xl font-bold">
+              📦{fromBahanBaku} 📝{fromReguler}
+            </p>
           </div>
         </div>
 
@@ -504,61 +588,67 @@ export default function PembelianPage() {
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-gray-50 border-b border-gray-200 z-10">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase">Tanggal</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase">Kategori</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase">Nama</th>
-                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-400 uppercase">Qty</th>
-                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-400 uppercase">Harga</th>
-                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-400 uppercase">Total</th>
-                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-400 uppercase">Aksi</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Tanggal</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Nama</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Qty</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Satuan</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Harga</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Total</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-400 uppercase">Sumber</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-400 uppercase">Aksi</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
-                      📭 Tidak ada data untuk filter ini
+                    <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
+                      📭 Belum ada data
                     </td>
                   </tr>
                 ) : (
                   filteredData.map((item) => (
-                    <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                      <td className="px-4 py-2 text-gray-500">
+                    <tr key={`${item.source}-${item.id}`} className="border-b border-gray-50 hover:bg-gray-50/50">
+                      <td className="px-4 py-3 text-gray-500">
                         {new Date(item.tanggal).toLocaleDateString('id-ID', {
                           day: 'numeric',
                           month: 'long',
                           year: 'numeric',
                         })}
                       </td>
-                      <td className="px-4 py-2">
-                        <span className={`px-2 py-0.5 rounded-full text-xs ${
-                          item.kategori === 'Bahan Baku' ? 'bg-green-100 text-green-700' :
-                          item.kategori === 'Operasional' ? 'bg-blue-100 text-blue-700' :
-                          item.kategori === 'Gaji' ? 'bg-purple-100 text-purple-700' :
-                          'bg-orange-100 text-orange-700'
-                        }`}>
-                          {item.kategori}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2 font-medium text-gray-900">
+                      <td className="px-4 py-3 font-medium text-gray-900">
                         {item.nama}
                         {item.detail && (
                           <span className="text-xs text-gray-400 ml-1">({item.detail})</span>
                         )}
                       </td>
-                      <td className="px-4 py-2 text-right text-gray-700">{item.qty}</td>
-                      <td className="px-4 py-2 text-right text-gray-600">{formatRupiah(item.harga)}</td>
-                      <td className="px-4 py-2 text-right font-medium text-gray-700">{formatRupiah(item.total)}</td>
-                      <td className="px-4 py-2 text-center">
+                      <td className="px-4 py-3 text-right text-gray-700">
+                        {item.qty}
+                        {item.source === 'bahan_baku' && (
+                          <span className="text-xs text-green-500 ml-1">↑</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right text-gray-500">
+                        {item.satuan || '-'}
+                      </td>
+                      <td className="px-4 py-3 text-right text-gray-600">
+                        {formatRupiah(item.harga)}
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium text-gray-700">
+                        {formatRupiah(item.total)}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          item.source === 'bahan_baku' 
+                            ? 'bg-green-100 text-green-700' 
+                            : 'bg-blue-100 text-blue-700'
+                        }`}>
+                          {item.source === 'bahan_baku' ? '📦 Bahan' : '📝 Reguler'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
                         <button
-                          onClick={() => handleEdit(item)}
-                          className="p-1 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          onClick={() => handleDelete(item.id, item.nama)}
-                          className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors ml-1"
+                          onClick={() => handleDelete(item.id, item.nama, item.source, item.tanggal)}
+                          className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
                         >
                           🗑️
                         </button>
@@ -569,8 +659,11 @@ export default function PembelianPage() {
               </tbody>
             </table>
           </div>
-          <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 text-xs text-gray-400">
-            Total {filteredData.length} data
+          <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 text-xs text-gray-400 flex justify-between">
+            <span>Total {filteredData.length} data</span>
+            <span>
+              📦 Bahan: {fromBahanBaku} | 📝 Reguler: {fromReguler}
+            </span>
           </div>
         </div>
       </div>

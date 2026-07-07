@@ -37,9 +37,11 @@ const formatRupiah = (angka: number) => {
 
 export default function Beranda() {
   const [data, setData] = useState<LaporanBulanan[]>([]);
+  const [filteredData, setFilteredData] = useState<LaporanBulanan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedYear, setSelectedYear] = useState('2025');
+  const [selectedYear, setSelectedYear] = useState('2026');
+  const [availableYears, setAvailableYears] = useState<string[]>(['2026']);
 
   const fetchData = async () => {
     try {
@@ -49,6 +51,18 @@ export default function Beranda() {
       
       if (result.status === '✅ Berhasil!') {
         setData(result.data);
+        
+        // Extract available years from data
+        const years = [...new Set(result.data.map((item: LaporanBulanan) => {
+          return item.bulanKey.split('-')[0];
+        }))].sort();
+        
+        if (years.length > 0) {
+          setAvailableYears(years);
+          if (!years.includes(selectedYear)) {
+            setSelectedYear(years[0]);
+          }
+        }
       } else {
         throw new Error(result.error || 'Gagal mengambil data');
       }
@@ -63,8 +77,17 @@ export default function Beranda() {
     fetchData();
   }, []);
 
+  // Filter data when year changes
+  useEffect(() => {
+    const filtered = data.filter(item => {
+      const year = item.bulanKey.split('-')[0];
+      return year === selectedYear;
+    });
+    setFilteredData(filtered);
+  }, [data, selectedYear]);
+
   // Data untuk grafik
-  const chartData = data.map((item) => ({
+  const chartData = filteredData.map((item) => ({
     bulan: item.bulan,
     qty: item.qtyProduksi,
     labaKotor: item.labaKotor,
@@ -112,13 +135,15 @@ export default function Beranda() {
     );
   }
 
-  // Total keseluruhan
-  const totalQty = data.reduce((sum, d) => sum + d.qtyProduksi, 0);
-  const totalProfit = data.reduce((sum, d) => sum + d.profit, 0);
-  const totalLabaKotor = data.reduce((sum, d) => sum + d.labaKotor, 0);
-  const totalCost = data.reduce((sum, d) => sum + d.jumlahCost, 0);
-  const totalOverhead = data.reduce((sum, d) => sum + d.overhead, 0);
-  const totalGaji = data.reduce((sum, d) => sum + d.gaji, 0);
+  // Total keseluruhan (dari filtered data)
+  const totalQty = filteredData.reduce((sum, d) => sum + (d.qtyProduksi || 0), 0);
+  const totalProfit = filteredData.reduce((sum, d) => sum + (d.profit || 0), 0);
+  const totalLabaKotor = filteredData.reduce((sum, d) => sum + (d.labaKotor || 0), 0);
+  const totalCost = filteredData.reduce((sum, d) => sum + (d.jumlahCost || 0), 0);
+  const totalOverhead = filteredData.reduce((sum, d) => sum + (d.overhead || 0), 0);
+  const totalGaji = filteredData.reduce((sum, d) => sum + (d.gaji || 0), 0);
+
+  const totalBulan = filteredData.length;
 
   return (
     <div className="w-full max-w-7xl mx-auto">
@@ -126,15 +151,20 @@ export default function Beranda() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-xl font-bold text-gray-800">📊 Laporan Tahunan {selectedYear}</h2>
-          <p className="text-sm text-gray-400">Data penjualan & produksi per bulan</p>
+          <p className="text-sm text-gray-400">
+            {totalBulan} bulan data
+          </p>
         </div>
         <div className="flex items-center gap-2">
+          <label className="text-sm text-gray-600">Tahun:</label>
           <select
             value={selectedYear}
             onChange={(e) => setSelectedYear(e.target.value)}
             className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
           >
-            <option value="2025">2025</option>
+            {availableYears.map((year) => (
+              <option key={year} value={year}>{year}</option>
+            ))}
           </select>
         </div>
       </div>
@@ -144,52 +174,62 @@ export default function Beranda() {
         <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-2xl p-4 text-white">
           <p className="text-sm opacity-80">Total Laba Kotor</p>
           <p className="text-2xl font-bold">{formatRupiah(totalLabaKotor)}</p>
+          <p className="text-xs opacity-70 mt-1">{totalBulan} bulan</p>
         </div>
         <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl p-4 text-white">
           <p className="text-sm opacity-80">Total Cost</p>
           <p className="text-2xl font-bold">{formatRupiah(totalCost)}</p>
+          <p className="text-xs opacity-70 mt-1">{totalBulan} bulan</p>
         </div>
         <div className="bg-gradient-to-r from-red-500 to-red-600 rounded-2xl p-4 text-white">
           <p className="text-sm opacity-80">Total Overhead</p>
           <p className="text-2xl font-bold">{formatRupiah(totalOverhead)}</p>
-          <p className="text-xs opacity-70 mt-1">{data.length} bulan</p>
+          <p className="text-xs opacity-70 mt-1">{totalBulan} bulan</p>
         </div>
         <div className="bg-gradient-to-r from-pink-500 to-pink-600 rounded-2xl p-4 text-white">
           <p className="text-sm opacity-80">Total Gaji</p>
           <p className="text-2xl font-bold">{formatRupiah(totalGaji)}</p>
-          <p className="text-xs opacity-70 mt-1">{data.length} bulan</p>
+          <p className="text-xs opacity-70 mt-1">{totalBulan} bulan</p>
         </div>
         <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-2xl p-4 text-white">
           <p className="text-sm opacity-80">Total Profit</p>
           <p className="text-2xl font-bold">{formatRupiah(totalProfit)}</p>
+          <p className="text-xs opacity-70 mt-1">{totalBulan} bulan</p>
         </div>
       </div>
 
-      {/* Grafik: Laba Kotor vs Profit vs Cost vs Overhead vs Gaji */}
+      {/* Grafik */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6">
         <h3 className="text-sm font-semibold text-gray-700 mb-4">
-          📊 Laba Kotor vs Profit vs Cost vs Overhead vs Gaji
+          📊 Laba Kotor vs Profit vs Cost vs Overhead vs Gaji ({selectedYear})
         </h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis dataKey="bulan" tick={{ fontSize: 10, fill: '#888' }} />
-            <YAxis tick={{ fontSize: 11, fill: '#888' }} tickFormatter={(v) => `Rp${(v/1000000).toFixed(0)}M`} />
-            <Tooltip formatter={(value: any) => formatRupiah(value)} />
-            <Legend />
-            <Bar dataKey="labaKotor" fill="#10B981" name="Laba Kotor" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="cost" fill="#aa1b4b" name="Cost" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="overhead" fill="#EF4444" name="Overhead" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="gaji" fill="#EC4899" name="Gaji" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="profit" fill="#3B82F6" name="Profit" radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+        {filteredData.length === 0 ? (
+          <div className="flex items-center justify-center h-[300px] text-gray-400">
+            <p>Tidak ada data untuk tahun {selectedYear}</p>
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="bulan" tick={{ fontSize: 10, fill: '#888' }} />
+              <YAxis tick={{ fontSize: 11, fill: '#888' }} tickFormatter={(v) => `Rp${(v/1000000).toFixed(0)}M`} />
+              <Tooltip formatter={(value: any) => formatRupiah(value)} />
+              <Legend />
+              <Bar dataKey="labaKotor" fill="#10B981" name="Laba Kotor" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="cost" fill="#aa1b4b" name="Cost" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="overhead" fill="#EF4444" name="Overhead" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="gaji" fill="#EC4899" name="Gaji" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="profit" fill="#3B82F6" name="Profit" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
       </div>
 
       {/* Tabel Detail */}
       <div className="mt-6 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100">
+        <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
           <h3 className="text-sm font-semibold text-gray-700">📋 Detail Laporan Bulanan</h3>
+          <span className="text-xs text-gray-400">{totalBulan} bulan</span>
         </div>
         <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
           <table className="w-full text-sm">
@@ -206,23 +246,32 @@ export default function Beranda() {
               </tr>
             </thead>
             <tbody>
-              {data.map((item) => (
-                <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                  <td className="px-3 py-2 font-medium text-gray-800">{item.bulan}</td>
-                  <td className="px-3 py-2 text-right text-gray-700">{item.qtyProduksi.toLocaleString()}</td>
-                  <td className="px-3 py-2 text-right text-gray-600">{formatRupiah(item.costPerPortion)}</td>
-                  <td className="px-3 py-2 text-right text-gray-700">{formatRupiah(item.jumlahCost)}</td>
-                  <td className="px-3 py-2 text-right text-orange-600">{formatRupiah(item.overhead)}</td>
-                  <td className="px-3 py-2 text-right text-pink-600">{formatRupiah(item.gaji)}</td>
-                  <td className="px-3 py-2 text-right text-green-600">{formatRupiah(item.labaKotor)}</td>
-                  <td className="px-3 py-2 text-right text-blue-600">{formatRupiah(item.profit)}</td>
+              {filteredData.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-3 py-8 text-center text-gray-400">
+                    📭 Tidak ada data untuk tahun {selectedYear}
+                  </td>
                 </tr>
-              ))}
+              ) : (
+                filteredData.map((item) => (
+                  <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                    <td className="px-3 py-2 font-medium text-gray-800">{item.bulan.trim()}</td>
+                    <td className="px-3 py-2 text-right text-gray-700">{item.qtyProduksi.toLocaleString()}</td>
+                    <td className="px-3 py-2 text-right text-gray-600">{formatRupiah(item.costPerPortion)}</td>
+                    <td className="px-3 py-2 text-right text-gray-700">{formatRupiah(item.jumlahCost)}</td>
+                    <td className="px-3 py-2 text-right text-orange-600">{formatRupiah(item.overhead)}</td>
+                    <td className="px-3 py-2 text-right text-pink-600">{formatRupiah(item.gaji)}</td>
+                    <td className="px-3 py-2 text-right text-green-600">{formatRupiah(item.labaKotor)}</td>
+                    <td className="px-3 py-2 text-right text-blue-600">{formatRupiah(item.profit)}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
-        <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 text-xs text-gray-400">
-          Total {data.length} bulan
+        <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 text-xs text-gray-400 flex justify-between">
+          <span>Total {totalBulan} bulan</span>
+          <span>Total Cost: {formatRupiah(totalCost)}</span>
         </div>
       </div>
     </div>

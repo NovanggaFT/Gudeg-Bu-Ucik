@@ -12,44 +12,45 @@ const pool = new Pool({
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
-// ✅ HARGA PER SATUAN TERKECIL
+// ✅ HARGA PER SATUAN (bukan per kg)
+// Semua harga dalam satuan terkecil (g, ml, lbr)
 const bahanBakuData = [
   // Bumbu Dapur
-  { nama: 'Ajinomoto', satuan: 'g', harga: 53 }, // 2.650/50g = 53/g
-  { nama: 'Asem', satuan: 'g', harga: 25 }, // 25.000/kg = 25/g
-  { nama: 'Bawang Merah', satuan: 'g', harga: 35 }, // 35.000/kg = 35/g
-  { nama: 'Bawang Putih', satuan: 'g', harga: 25 }, // 25.000/kg = 25/g
-  { nama: 'Cabai Merah', satuan: 'g', harga: 50 }, // 50.000/kg = 50/g
-  { nama: 'Cabai Rawit', satuan: 'g', harga: 57 }, // 57.000/kg = 57/g
-  { nama: 'Daun Bawang', satuan: 'g', harga: 9 }, // 9.000/kg = 9/g
-  { nama: 'Daun Salam', satuan: 'Lbr', harga: 150 }, // 1.500/10lbr = 150/lbr
-  { nama: 'Garam', satuan: 'g', harga: 0.25 }, // 250/kg = 0.25/g
-  { nama: 'Gula Merah', satuan: 'g', harga: 14 }, // 14.000/kg = 14/g
-  { nama: 'Gula Putih', satuan: 'g', harga: 17 }, // 17.000/kg = 17/g
-  { nama: 'Kelapa', satuan: 'g', harga: 12 }, // 12.000/kg = 12/g
-  { nama: 'Kemiri', satuan: 'g', harga: 45 }, // 45.000/kg = 45/g
-  { nama: 'Kentang', satuan: 'g', harga: 12 }, // 12.000/kg = 12/g
-  { nama: 'Ketumbar', satuan: 'g', harga: 45 }, // 45.000/kg = 45/g
-  { nama: 'Krecek Rambak', satuan: 'g', harga: 100 }, // 100.000/kg = 100/g
-  { nama: 'Kubis Sayur', satuan: 'g', harga: 8 }, // 8.000/kg = 8/g
-  { nama: 'Kunyit', satuan: 'g', harga: 10 }, // 10.000/kg = 10/g
-  { nama: 'Lada', satuan: 'g', harga: 205 }, // 205.000/kg = 205/g
-  { nama: 'Lengkuas', satuan: 'g', harga: 8 }, // 8.000/kg = 8/g
-  { nama: 'Mie Sealon', satuan: 'g', harga: 10 }, // 10.000/kg = 10/g
-  { nama: 'Nangka Muda', satuan: 'g', harga: 10 }, // 10.000/kg = 10/g
-  { nama: 'Royco', satuan: 'g', harga: 4.17 }, // 417/100g = 4.17/g
-  { nama: 'Tahu', satuan: 'g', harga: 0.5 }, // 500/kg = 0.5/g
-  { nama: 'Telur', satuan: 'g', harga: 23.5 }, // 23.500/kg = 23.5/g
-  { nama: 'Terasi', satuan: 'g', harga: 45 }, // 45.000/kg = 45/g
-  { nama: 'Tomat', satuan: 'g', harga: 10 }, // 10.000/kg = 10/g
-  { nama: 'Wortel', satuan: 'g', harga: 10 }, // 10.000/kg = 10/g
-  { nama: 'Nasi', satuan: 'g', harga: 16 }, // 16.000/kg = 16/g
-  { nama: 'Ayam', satuan: 'g', harga: 50 }, // 50.000/kg = 50/g
-  { nama: 'Kecap', satuan: 'ml', harga: 27.37 }, // 26.000/950ml = 27.37/ml
+  { nama: 'Ajinomoto', satuan: 'g', harga: 0 }, // 2.650/50g = 53/g
+  { nama: 'Asem', satuan: 'g', harga: 0 }, // 25.000/kg = 25/g
+  { nama: 'Bawang Merah', satuan: 'g', harga: 0 }, // 32.000/kg = 32/g
+  { nama: 'Bawang Putih', satuan: 'g', harga: 0 }, // 22.000/kg = 22/g
+  { nama: 'Cabai Merah', satuan: 'g', harga: 0 }, // 42.000/kg = 42/g
+  { nama: 'Cabai Rawit', satuan: 'g', harga: 0 }, // 48.000/kg = 48/g
+  { nama: 'Daun Bawang', satuan: 'g', harga: 0 }, // 9.000/kg = 9/g
+  { nama: 'Daun Salam', satuan: 'Lbr', harga: 0 }, // 1.500/10lbr = 150/lbr
+  { nama: 'Garam', satuan: 'g', harga: 0.0 }, // 250/kg = 0.25/g
+  { nama: 'Gula Merah', satuan: 'g', harga: 0 }, // 14.000/kg = 14/g
+  { nama: 'Gula Putih', satuan: 'g', harga: 0 }, // 17.000/kg = 17/g
+  { nama: 'Kelapa', satuan: 'g', harga: 0 }, // 8.000/kg = 8/g
+  { nama: 'Kemiri', satuan: 'g', harga: 0 }, // 42.000/kg = 42/g
+  { nama: 'Kentang', satuan: 'g', harga: 0.0 }, // 10.500/kg = 10.5/g
+  { nama: 'Ketumbar', satuan: 'g', harga: 0 }, // 45.000/kg = 45/g
+  { nama: 'Krecek Rambak', satuan: 'g', harga: 0 }, // 100.000/kg = 100/g
+  { nama: 'Kubis Sayur', satuan: 'g', harga: 0 }, // 6.000/kg = 6/g
+  { nama: 'Kunyit', satuan: 'g', harga: 0 }, // 10.000/kg = 10/g
+  { nama: 'Lada', satuan: 'g', harga: 0 }, // 205.000/kg = 205/g
+  { nama: 'Lengkuas', satuan: 'g', harga: 0 }, // 8.000/kg = 8/g
+  { nama: 'Mie Sealon', satuan: 'g', harga: 0 }, // 10.000/kg = 10/g
+  { nama: 'Nangka Muda', satuan: 'g', harga: 0 }, // 10.000/kg = 10/g
+  { nama: 'Royco', satuan: 'g', harga: 0.0 }, // 417/100g = 4.17/g
+  { nama: 'Tahu', satuan: 'g', harga: 0.0 }, // 500/kg = 0.5/g
+  { nama: 'Telur', satuan: 'g', harga: 0.0 }, // 21.150/kg = 21.15/g
+  { nama: 'Terasi', satuan: 'g', harga: 0 }, // 45.000/kg = 45/g
+  { nama: 'Tomat', satuan: 'g', harga: 0 }, // 8.000/kg = 8/g
+  { nama: 'Wortel', satuan: 'g', harga: 0 }, // 9.000/kg = 9/g
+  { nama: 'Nasi', satuan: 'g', harga: 0 }, // 16.000/kg = 16/g
+  { nama: 'Ayam', satuan: 'g', harga: 0 }, // 48.000/kg = 48/g
+  { nama: 'Kecap', satuan: 'ml', harga: 0.0 }, // 26.000/950ml = 27.37/ml
 ];
 
 async function main() {
-  console.log('🌱 Seeding bahan baku...');
+  console.log('🌱 Seeding bahan baku dengan harga per satuan...');
   console.log('📦 Harga dalam satuan terkecil (g, ml, lbr)');
 
   await prisma.bahanBaku.deleteMany();
@@ -60,7 +61,7 @@ async function main() {
       data: {
         nama: data.nama,
         satuan: data.satuan,
-        harga: Math.round(data.harga * 1000) / 1000,
+        harga: Math.round(data.harga * 1000) / 1000, // Simpan dengan 3 desimal
         stok: 0,
         stokMinimal: 0,
       },

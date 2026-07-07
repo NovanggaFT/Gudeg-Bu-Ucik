@@ -1,49 +1,69 @@
 // app/api/pembelian/[id]/route.ts
 
-import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
+import { NextResponse } from 'next/server';
 
 export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  request: Request,
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params;
+    const { id } = await context.params;
+    console.log(`🗑️ DELETE /api/pembelian/${id}`);
 
-    if (!id) {
+    // 1. Cek apakah data ada di PembelianBahanBaku
+    const bahanBaku = await prisma.$queryRaw`
+      SELECT pbb.*, bb.* 
+      FROM "PembelianBahanBaku" pbb
+      LEFT JOIN "BahanBaku" bb ON pbb."bahanBakuId" = bb.id
+      WHERE pbb.id = ${id}
+    `;
+
+    if (bahanBaku && bahanBaku.length > 0) {
+      const item = bahanBaku[0];
+      
+      // Rollback stok
+      if (item.bahanBakuId) {
+        const bahan = await prisma.$queryRaw`
+          SELECT * FROM "BahanBaku" WHERE id = ${item.bahanBakuId}
+        `;
+        
+        if (bahan && bahan.length > 0) {
+          const stokLama = Number(bahan[0].stok) - Number(item.qty);
+          const hargaLama = stokLama > 0 
+            ? Math.round(((Number(bahan[0].stok) * Number(bahan[0].harga)) - Number(item.total)) / stokLama)
+            : 0;
+
+          await prisma.$executeRaw`
+            UPDATE "BahanBaku" 
+            SET stok = ${Math.max(0, stokLama)}, harga = ${Math.max(0, hargaLama)}
+            WHERE id = ${item.bahanBakuId}
+          `;
+        }
+      }
+
+      // Hapus dari PembelianBahanBaku
+      await prisma.$executeRaw`
+        DELETE FROM "PembelianBahanBaku" WHERE id = ${id}
+      `;
+
       return NextResponse.json({
-        status: '❌ GAGAL',
-        error: 'ID wajib diisi',
-      }, { status: 400 });
+        status: '✅ Berhasil!',
+        message: 'Data pembelian bahan baku berhasil dihapus',
+      });
     }
 
-    // Ambil data pembelian sebelum dihapus
-    const pembelian = await prisma.pembelian.findUnique({
-      where: { id },
-    });
-
-    if (!pembelian) {
-      return NextResponse.json({
-        status: '❌ GAGAL',
-        error: 'Data pembelian tidak ditemukan',
-      }, { status: 404 });
-    }
-
-    // ✅ HAPUS LOGIKA ROLLBACK STOK (karena tidak ada relasi)
-    // Stok bahan baku diupdate melalui pembelianBahanBaku terpisah
-    // Jika perlu rollback, harus di tabel PembelianBahanBaku
-
-    // Hapus data pembelian
-    await prisma.pembelian.delete({
-      where: { id },
-    });
+    // 2. Jika tidak ada di PembelianBahanBaku, hapus dari Pembelian
+    await prisma.$executeRaw`
+      DELETE FROM "Pembelian" WHERE id = ${id}
+    `;
 
     return NextResponse.json({
       status: '✅ Berhasil!',
       message: 'Data pembelian berhasil dihapus',
     });
   } catch (error: any) {
-    console.error('Error deleting pembelian:', error);
+    console.error('❌ Error deleting pembelian:', error);
     return NextResponse.json({
       status: '❌ GAGAL',
       error: error.message,

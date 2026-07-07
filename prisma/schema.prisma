@@ -21,15 +21,15 @@ enum StatusStok {
 model BahanBaku {
   id          String   @id @default(cuid())
   nama        String
-  satuan      String   // Kg, Pcs, Lbr, Ml, Gr
+  satuan      String   // g, kg, pcs, lbr, ml
   harga       Int      // Harga per satuan
-  stok        Float    @default(0)  // Stok saat ini
-  stokMinimal Float    @default(0)  // Target minimal stok
+  stok        Float    @default(0)
+  stokMinimal Float    @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  produkDetail ProdukBahanBaku[]
-  pembelian   PembelianBahanBaku[]
+  produkDetail   ProdukBahanBaku[]
+  pembelianBahan PembelianBahanBaku[]
 
   @@unique([nama])
   @@index([nama])
@@ -42,10 +42,10 @@ model Produk {
   id          String   @id @default(cuid())
   nama        String
   sku         String   @unique
-  hpp         Int      // Harga Pokok Produksi (dari resep)
-  hargaJual   Int      // Harga jual per porsi
-  stok        Float    @default(0)  // Stok produk (dihitung dari bahan baku)
-  targetStok  Float    @default(0)  // Target minimal stok
+  hpp         Int
+  hargaJual   Int
+  stok        Float    @default(0)
+  targetStok  Float    @default(0)
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -64,7 +64,7 @@ model ProdukBahanBaku {
   id          String   @id @default(cuid())
   produkId    String
   bahanBakuId String
-  qty         Float    // Qty bahan baku per porsi produk
+  qty         Float
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -77,14 +77,14 @@ model ProdukBahanBaku {
 }
 
 // ========================================
-// 4. PEMBELIAN BAHAN BAKU
+// 4. PEMBELIAN BAHAN BAKU (KHUSUS BAHAN BAKU)
 // ========================================
 model PembelianBahanBaku {
   id          String   @id @default(cuid())
   tanggal     DateTime @default(now())
   bahanBakuId String
   qty         Float
-  harga       Int      // Harga saat pembelian
+  harga       Int      // Harga per satuan saat pembelian
   total       Int      // qty × harga
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -103,9 +103,9 @@ model Penjualan {
   tanggal     DateTime @default(now())
   produkId    String
   qty         Float
-  hargaJual   Int      // Snapshot harga jual saat transaksi
-  hpp         Int      // Snapshot HPP saat transaksi
-  profit      Int      // (hargaJual - hpp) × qty
+  hargaJual   Int
+  hpp         Int
+  profit      Int
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -116,7 +116,7 @@ model Penjualan {
 }
 
 // ========================================
-// 6. LAPORAN BULANAN (EXISTING)
+// 6. LAPORAN BULANAN
 // ========================================
 model LaporanBulanan {
   id                  String   @id @default(cuid())
@@ -135,12 +135,12 @@ model LaporanBulanan {
 }
 
 // ========================================
-// 7. PENGGALIAN (EXISTING)
+// 7. PENGGALIAN
 // ========================================
 model Penggajian {
   id                  String   @id @default(cuid())
   nama                String
-  posisi              String   // "Kitchen" atau "Seller"
+  posisi              String
   gaji                Int
   tanggal_penggajian  DateTime
   createdAt           DateTime @default(now())
@@ -152,7 +152,7 @@ model Penggajian {
 }
 
 // ========================================
-// 8. ASSET & OVERHEAD (EXISTING)
+// 8. ASSET & OVERHEAD
 // ========================================
 model Asset {
   id          String   @id @default(cuid())
@@ -162,7 +162,7 @@ model Asset {
   price       Int
   total       Int
   perMonth    Int
-  status      String   @default("Baik") // Baik, Rusak, Perbaikan
+  status      String   @default("Baik")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -170,24 +170,20 @@ model Asset {
   @@index([status])
 }
 
-// 9. Pembelian
+// ========================================
+// 9. PEMBELIAN (FLEKSIBEL - TANPA KATEGORI)
+// ========================================
 model Pembelian {
   id          String   @id @default(cuid())
   tanggal     DateTime @default(now())
-  kategori    String   // "Bahan Baku", "Operasional", "Gaji", "Overhead"
-  nama        String   // Nama item (Bahan baku, Gas, Retribusi, dll)
-  detail      String?  // Detail tambahan (10 Tabung, dll)
+  nama        String
+  detail      String?
   qty         Float    @default(0)
   harga       Int      @default(0)
   total       Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  // ✅ HAPUS INI:
-  // bahanBakuId String?
-  // bahanBaku   BahanBaku? @relation(...)
-
   @@index([tanggal])
-  @@index([kategori])
   @@index([nama])
 }
