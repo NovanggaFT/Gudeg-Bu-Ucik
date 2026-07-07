@@ -12,8 +12,14 @@ const pool = new Pool({
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
-// Total Overhead per tahun = 136.706.771
-const OVERHEAD_PER_BULAN = Math.round(136706771 / 12);
+// Total Overhead per tahun = 136.706.772
+const TOTAL_OVERHEAD_TAHUNAN = 136706771;
+const OVERHEAD_PER_BULAN = Math.floor(TOTAL_OVERHEAD_TAHUNAN / 12); // 11.392.231
+const SISA_OVERHEAD = TOTAL_OVERHEAD_TAHUNAN - (OVERHEAD_PER_BULAN * 12); // Sisa akan ditambahkan ke Desember
+
+console.log(`📊 Total Overhead Tahunan: Rp${TOTAL_OVERHEAD_TAHUNAN.toLocaleString()}`);
+console.log(`📊 Overhead per bulan (11 bulan pertama): Rp${OVERHEAD_PER_BULAN.toLocaleString()}`);
+console.log(`📊 Sisa overhead untuk Desember: Rp${SISA_OVERHEAD.toLocaleString()}`);
 
 // ✅ HARI KERJA PER BULAN (TANPA LIBUR MINGGU & NASIONAL)
 const HARI_KERJA_PER_BULAN: Record<string, number> = {
@@ -39,7 +45,6 @@ for (const [bulan, hari] of Object.entries(HARI_KERJA_PER_BULAN)) {
 
 const TOTAL_GAJI_TAHUNAN = Object.values(GAJI_PER_BULAN_DETAIL).reduce((a, b) => a + b, 0);
 
-console.log(`📊 Overhead per bulan: Rp${OVERHEAD_PER_BULAN.toLocaleString()}`);
 console.log(`📊 Total Gaji Tahunan: Rp${TOTAL_GAJI_TAHUNAN.toLocaleString()}`);
 console.log('\n📊 Detail Gaji per Bulan:');
 for (const [bulan, gaji] of Object.entries(GAJI_PER_BULAN_DETAIL)) {
@@ -59,134 +64,153 @@ function getBulanDate(bulanStr: string): Date {
   return date;
 }
 
-// ✅ TAMBAHKAN laporanDataRaw
+// ✅ DATA PER BULAN (AGGREGATED)
 const laporanDataRaw = [
   // Januari 2025
-  { bulanStr: 'Januari 2025', menu: 'Nasi Gudeg Campur', qtyProduksi: 8090, costPerPortion: 11111, jumlahCost: 89890190, labaKotor: 129440000 },
-  { bulanStr: 'Januari 2025', menu: 'Ayam Bakar Bumbu Rujak', qtyProduksi: 760, costPerPortion: 16379, jumlahCost: 12448192, labaKotor: 17480000 },
-  { bulanStr: 'Januari 2025', menu: 'Ayam Bakar Bumbu Kecap', qtyProduksi: 760, costPerPortion: 14175, jumlahCost: 10773156, labaKotor: 17480000 },
+  { 
+    bulanStr: 'Januari 2025', 
+    qtyProduksi: 8090 + 760 + 760, 
+    costPerPortion: Math.round((89890190 + 12448192 + 10773156) / (8090 + 760 + 760)),
+    jumlahCost: 89890190 + 12448192 + 10773156,
+    labaKotor: 129440000 + 17480000 + 17480000
+  },
   // Februari 2025
-  { bulanStr: 'Februari 2025', menu: 'Nasi Gudeg Campur', qtyProduksi: 6400, costPerPortion: 11111, jumlahCost: 71112141, labaKotor: 102400000 },
-  { bulanStr: 'Februari 2025', menu: 'Ayam Bakar Bumbu Rujak', qtyProduksi: 560, costPerPortion: 16379, jumlahCost: 9172352, labaKotor: 12880000 },
-  { bulanStr: 'Februari 2025', menu: 'Ayam Bakar Bumbu Kecap', qtyProduksi: 560, costPerPortion: 14175, jumlahCost: 7938115, labaKotor: 12880000 },
+  { 
+    bulanStr: 'Februari 2025', 
+    qtyProduksi: 6400 + 560 + 560,
+    costPerPortion: Math.round((71112141 + 9172352 + 7938115) / (6400 + 560 + 560)),
+    jumlahCost: 71112141 + 9172352 + 7938115,
+    labaKotor: 102400000 + 12880000 + 12880000
+  },
   // Maret 2025
-  { bulanStr: 'Maret 2025', menu: 'Nasi Gudeg Campur', qtyProduksi: 2950, costPerPortion: 11111, jumlahCost: 32778252, labaKotor: 47200000 },
-  { bulanStr: 'Maret 2025', menu: 'Ayam Bakar Bumbu Rujak', qtyProduksi: 300, costPerPortion: 16379, jumlahCost: 4913760, labaKotor: 6900000 },
-  { bulanStr: 'Maret 2025', menu: 'Ayam Bakar Bumbu Kecap', qtyProduksi: 280, costPerPortion: 14175, jumlahCost: 3969057, labaKotor: 6440000 },
+  { 
+    bulanStr: 'Maret 2025', 
+    qtyProduksi: 2950 + 300 + 280,
+    costPerPortion: Math.round((32778252 + 4913760 + 3969057) / (2950 + 300 + 280)),
+    jumlahCost: 32778252 + 4913760 + 3969057,
+    labaKotor: 47200000 + 6900000 + 6440000
+  },
   // April 2025
-  { bulanStr: 'April 2025', menu: 'Nasi Gudeg Campur', qtyProduksi: 6432, costPerPortion: 11111, jumlahCost: 71467702, labaKotor: 102912000 },
-  { bulanStr: 'April 2025', menu: 'Ayam Bakar Bumbu Rujak', qtyProduksi: 525, costPerPortion: 16379, jumlahCost: 8599080, labaKotor: 12075000 },
-  { bulanStr: 'April 2025', menu: 'Ayam Bakar Bumbu Kecap', qtyProduksi: 522, costPerPortion: 14175, jumlahCost: 7399457, labaKotor: 12006000 },
+  { 
+    bulanStr: 'April 2025', 
+    qtyProduksi: 6432 + 525 + 522,
+    costPerPortion: Math.round((71467702 + 8599080 + 7399457) / (6432 + 525 + 522)),
+    jumlahCost: 71467702 + 8599080 + 7399457,
+    labaKotor: 102912000 + 12075000 + 12006000
+  },
   // Mei 2025
-  { bulanStr: 'Mei 2025', menu: 'Nasi Gudeg Campur', qtyProduksi: 6620, costPerPortion: 11111, jumlahCost: 73556621, labaKotor: 105920000 },
-  { bulanStr: 'Mei 2025', menu: 'Ayam Bakar Bumbu Rujak', qtyProduksi: 572, costPerPortion: 16379, jumlahCost: 9368902, labaKotor: 13156000 },
-  { bulanStr: 'Mei 2025', menu: 'Ayam Bakar Bumbu Kecap', qtyProduksi: 526, costPerPortion: 14175, jumlahCost: 7456158, labaKotor: 12098000 },
+  { 
+    bulanStr: 'Mei 2025', 
+    qtyProduksi: 6620 + 572 + 526,
+    costPerPortion: Math.round((73556621 + 9368902 + 7456158) / (6620 + 572 + 526)),
+    jumlahCost: 73556621 + 9368902 + 7456158,
+    labaKotor: 105920000 + 13156000 + 12098000
+  },
   // Juni 2025
-  { bulanStr: 'Juni 2025', menu: 'Nasi Gudeg Campur', qtyProduksi: 7246, costPerPortion: 11111, jumlahCost: 80512277, labaKotor: 115936000 },
-  { bulanStr: 'Juni 2025', menu: 'Ayam Bakar Bumbu Rujak', qtyProduksi: 610, costPerPortion: 16379, jumlahCost: 9991312, labaKotor: 14030000 },
-  { bulanStr: 'Juni 2025', menu: 'Ayam Bakar Bumbu Kecap', qtyProduksi: 606, costPerPortion: 14175, jumlahCost: 8590174, labaKotor: 13938000 },
+  { 
+    bulanStr: 'Juni 2025', 
+    qtyProduksi: 7246 + 610 + 606,
+    costPerPortion: Math.round((80512277 + 9991312 + 8590174) / (7246 + 610 + 606)),
+    jumlahCost: 80512277 + 9991312 + 8590174,
+    labaKotor: 115936000 + 14030000 + 13938000
+  },
   // Juli 2025
-  { bulanStr: 'Juli 2025', menu: 'Nasi Gudeg Campur', qtyProduksi: 7860, costPerPortion: 11111, jumlahCost: 87334598, labaKotor: 125760000 },
-  { bulanStr: 'Juli 2025', menu: 'Ayam Bakar Bumbu Rujak', qtyProduksi: 740, costPerPortion: 16379, jumlahCost: 12120608, labaKotor: 17020000 },
-  { bulanStr: 'Juli 2025', menu: 'Ayam Bakar Bumbu Kecap', qtyProduksi: 720, costPerPortion: 14175, jumlahCost: 10206148, labaKotor: 16560000 },
+  { 
+    bulanStr: 'Juli 2025', 
+    qtyProduksi: 7860 + 740 + 720,
+    costPerPortion: Math.round((87334598 + 12120608 + 10206148) / (7860 + 740 + 720)),
+    jumlahCost: 87334598 + 12120608 + 10206148,
+    labaKotor: 125760000 + 17020000 + 16560000
+  },
   // Agustus 2025
-  { bulanStr: 'Agustus 2025', menu: 'Nasi Gudeg Campur', qtyProduksi: 6489, costPerPortion: 11111, jumlahCost: 72101044, labaKotor: 103824000 },
-  { bulanStr: 'Agustus 2025', menu: 'Ayam Bakar Bumbu Rujak', qtyProduksi: 464, costPerPortion: 16379, jumlahCost: 7599949, labaKotor: 10672000 },
-  { bulanStr: 'Agustus 2025', menu: 'Ayam Bakar Bumbu Kecap', qtyProduksi: 456, costPerPortion: 14175, jumlahCost: 6463894, labaKotor: 10488000 },
+  { 
+    bulanStr: 'Agustus 2025', 
+    qtyProduksi: 6489 + 464 + 456,
+    costPerPortion: Math.round((72101044 + 7599949 + 6463894) / (6489 + 464 + 456)),
+    jumlahCost: 72101044 + 7599949 + 6463894,
+    labaKotor: 103824000 + 10672000 + 10488000
+  },
   // September 2025
-  { bulanStr: 'September 2025', menu: 'Nasi Gudeg Campur', qtyProduksi: 5700, costPerPortion: 11111, jumlahCost: 63334250, labaKotor: 91200000 },
-  { bulanStr: 'September 2025', menu: 'Ayam Bakar Bumbu Rujak', qtyProduksi: 380, costPerPortion: 16379, jumlahCost: 6224096, labaKotor: 8740000 },
-  { bulanStr: 'September 2025', menu: 'Ayam Bakar Bumbu Kecap', qtyProduksi: 380, costPerPortion: 14175, jumlahCost: 5386578, labaKotor: 8740000 },
+  { 
+    bulanStr: 'September 2025', 
+    qtyProduksi: 5700 + 380 + 380,
+    costPerPortion: Math.round((63334250 + 6224096 + 5386578) / (5700 + 380 + 380)),
+    jumlahCost: 63334250 + 6224096 + 5386578,
+    labaKotor: 91200000 + 8740000 + 8740000
+  },
   // Oktober 2025
-  { bulanStr: 'Oktober 2025', menu: 'Nasi Gudeg Campur', qtyProduksi: 8570, costPerPortion: 11111, jumlahCost: 95223601, labaKotor: 137120000 },
-  { bulanStr: 'Oktober 2025', menu: 'Ayam Bakar Bumbu Rujak', qtyProduksi: 748, costPerPortion: 16379, jumlahCost: 12251642, labaKotor: 17204000 },
-  { bulanStr: 'Oktober 2025', menu: 'Ayam Bakar Bumbu Kecap', qtyProduksi: 740, costPerPortion: 14175, jumlahCost: 10489652, labaKotor: 17020000 },
+  { 
+    bulanStr: 'Oktober 2025', 
+    qtyProduksi: 8570 + 748 + 740,
+    costPerPortion: Math.round((95223601 + 12251642 + 10489652) / (8570 + 748 + 740)),
+    jumlahCost: 95223601 + 12251642 + 10489652,
+    labaKotor: 137120000 + 17204000 + 17020000
+  },
   // November 2025
-  { bulanStr: 'November 2025', menu: 'Nasi Gudeg Campur', qtyProduksi: 5950, costPerPortion: 11111, jumlahCost: 66112068, labaKotor: 95200000 },
-  { bulanStr: 'November 2025', menu: 'Ayam Bakar Bumbu Rujak', qtyProduksi: 420, costPerPortion: 16379, jumlahCost: 6879264, labaKotor: 9660000 },
-  { bulanStr: 'November 2025', menu: 'Ayam Bakar Bumbu Kecap', qtyProduksi: 428, costPerPortion: 14175, jumlahCost: 6066988, labaKotor: 9844000 },
+  { 
+    bulanStr: 'November 2025', 
+    qtyProduksi: 5950 + 420 + 428,
+    costPerPortion: Math.round((66112068 + 6879264 + 6066988) / (5950 + 420 + 428)),
+    jumlahCost: 66112068 + 6879264 + 6066988,
+    labaKotor: 95200000 + 9660000 + 9844000
+  },
   // Desember 2025
-  { bulanStr: 'Desember 2025', menu: 'Nasi Gudeg Campur', qtyProduksi: 7960, costPerPortion: 11111, jumlahCost: 88445725, labaKotor: 127360000 },
-  { bulanStr: 'Desember 2025', menu: 'Ayam Bakar Bumbu Rujak', qtyProduksi: 724, costPerPortion: 16379, jumlahCost: 11858541, labaKotor: 16652000 },
-  { bulanStr: 'Desember 2025', menu: 'Ayam Bakar Bumbu Kecap', qtyProduksi: 724, costPerPortion: 14175, jumlahCost: 10262849, labaKotor: 16652000 },
+  { 
+    bulanStr: 'Desember 2025', 
+    qtyProduksi: 7960 + 724 + 724,
+    costPerPortion: Math.round((88445725 + 11858541 + 10262849) / (7960 + 724 + 724)),
+    jumlahCost: 88445725 + 11858541 + 10262849,
+    labaKotor: 127360000 + 16652000 + 16652000
+  },
 ];
 
-function processLaporanData(data: any[]) {
-  const grouped: Record<string, any[]> = {};
-  
-  for (const item of data) {
-    if (!grouped[item.bulanStr]) {
-      grouped[item.bulanStr] = [];
-    }
-    grouped[item.bulanStr].push(item);
-  }
-
-  const result = [];
-  for (const bulanStr of Object.keys(grouped)) {
-    const items = grouped[bulanStr];
-    const totalQty = items.reduce((sum, item) => sum + item.qtyProduksi, 0);
-    const bulanDate = getBulanDate(bulanStr);
-    
-    const gajiBulan = GAJI_PER_BULAN_DETAIL[bulanStr] || 0;
-    let remainingGaji = gajiBulan;
-
-    const itemsWithCost = items.map((item, index) => {
-      const overhead = Math.round((item.qtyProduksi / totalQty) * OVERHEAD_PER_BULAN);
-      
-      let gaji;
-      if (index === items.length - 1) {
-        gaji = remainingGaji;
-      } else {
-        gaji = Math.round((item.qtyProduksi / totalQty) * gajiBulan);
-        remainingGaji -= gaji;
-      }
-      
-      const totalCost = item.jumlahCost + overhead + gaji;
-      const profit = item.labaKotor - totalCost;
-      
-      return {
-        ...item,
-        bulan: bulanDate,
-        overhead,
-        gaji,
-        totalCost,
-        profit,
-      };
-    });
-    
-    result.push(...itemsWithCost);
-  }
-  
-  return result;
-}
-
 async function importLaporan() {
-  console.log('\n📥 Importing laporan bulanan dengan overhead & gaji detail...');
-  console.log(`📊 Overhead per bulan: Rp${OVERHEAD_PER_BULAN.toLocaleString()}`);
+  console.log('\n📥 Importing laporan bulanan (1 bulan = 1 row)...');
+  console.log(`📊 Overhead per bulan (11 bulan pertama): Rp${OVERHEAD_PER_BULAN.toLocaleString()}`);
+  console.log(`📊 Overhead Desember (dengan sisa): Rp${(OVERHEAD_PER_BULAN + SISA_OVERHEAD).toLocaleString()}`);
   console.log(`📊 Total Gaji Tahunan: Rp${TOTAL_GAJI_TAHUNAN.toLocaleString()}`);
   
-  const processedData = processLaporanData(laporanDataRaw);
-  console.log(`\n📊 Found ${processedData.length} records`);
-
   await prisma.laporanBulanan.deleteMany();
   console.log('🗑️ Data lama dihapus');
+
+  const processedData = laporanDataRaw.map((item, index) => {
+    const bulanDate = getBulanDate(item.bulanStr);
+    const gajiBulan = GAJI_PER_BULAN_DETAIL[item.bulanStr] || 0;
+    
+    // ✅ Tambahkan sisa overhead ke Desember (index terakhir = 11)
+    const overheadBulan = (index === laporanDataRaw.length - 1) 
+      ? OVERHEAD_PER_BULAN + SISA_OVERHEAD 
+      : OVERHEAD_PER_BULAN;
+    
+    const totalCost = item.jumlahCost + overheadBulan + gajiBulan;
+    const profit = item.labaKotor - totalCost;
+    
+    return {
+      bulan: bulanDate,
+      qtyProduksi: item.qtyProduksi,
+      costPerPortion: item.costPerPortion,
+      jumlahCost: item.jumlahCost,
+      overhead: overheadBulan,
+      gaji: gajiBulan,
+      labaKotor: item.labaKotor,
+      profit: profit,
+    };
+  });
+
+  console.log(`\n📊 Found ${processedData.length} records`);
+
+  // Verifikasi total overhead
+  const totalOverheadTerhitung = processedData.reduce((sum, item) => sum + item.overhead, 0);
+  console.log(`📊 Total Overhead Terhitung: Rp${totalOverheadTerhitung.toLocaleString()}`);
+  console.log(`📊 Total Overhead Seharusnya: Rp${TOTAL_OVERHEAD_TAHUNAN.toLocaleString()}`);
+  console.log(`📊 Selisih: Rp${(totalOverheadTerhitung - TOTAL_OVERHEAD_TAHUNAN).toLocaleString()}`);
 
   const batchSize = 50;
   let batch: any[] = [];
   let totalInserted = 0;
 
   for (const item of processedData) {
-    batch.push({
-      bulan: item.bulan,
-      menu: item.menu,
-      qtyProduksi: item.qtyProduksi,
-      costPerPortion: item.costPerPortion,
-      jumlahCost: item.jumlahCost,
-      overhead: item.overhead,
-      gaji: item.gaji,
-      labaKotor: item.labaKotor,
-      profit: item.profit,
-    });
+    batch.push(item);
 
     if (batch.length >= batchSize) {
       await prisma.laporanBulanan.createMany({ data: batch });
@@ -205,34 +229,25 @@ async function importLaporan() {
 
   // Preview
   const preview = await prisma.laporanBulanan.findMany({
-    take: 10,
+    take: 12,
     orderBy: { bulan: 'asc' },
   });
   console.log('\n📋 Preview:');
   preview.forEach(p => {
     const bulanStr = p.bulan.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
-    console.log(`   ${bulanStr} | ${p.menu} | Gaji:${p.gaji.toLocaleString()} | Overhead:${p.overhead.toLocaleString()} | Profit:${p.profit.toLocaleString()}`);
+    console.log(`   ${bulanStr} | Qty:${p.qtyProduksi.toLocaleString()} | Overhead:${p.overhead.toLocaleString()} | Gaji:${p.gaji.toLocaleString()} | Profit:${p.profit.toLocaleString()}`);
   });
 
-  // Summary per bulan
+  // Summary total overhead
   const summary = await prisma.$queryRaw`
     SELECT 
-      TO_CHAR(bulan, 'Month YYYY') as bulan,
       SUM(overhead) as total_overhead,
       SUM(gaji) as total_gaji,
       SUM(profit) as total_profit
     FROM "LaporanBulanan"
-    GROUP BY bulan
-    ORDER BY bulan
   `;
-  console.log('\n📊 Summary per bulan:');
+  console.log('\n📊 Summary Total:');
   console.table(summary);
-
-  // Total Gaji dari database
-  const totalGajiDb = await prisma.laporanBulanan.aggregate({
-    _sum: { gaji: true },
-  });
-  console.log(`\n📊 Total Gaji di Database: Rp${(totalGajiDb._sum.gaji || 0).toLocaleString()}`);
 
   await prisma.$disconnect();
 }

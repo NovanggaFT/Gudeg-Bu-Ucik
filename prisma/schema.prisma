@@ -121,7 +121,6 @@ model Penjualan {
 model LaporanBulanan {
   id                  String   @id @default(cuid())
   bulan               DateTime
-  menu                String
   qtyProduksi         Int
   costPerPortion      Int
   jumlahCost          Int
@@ -133,7 +132,6 @@ model LaporanBulanan {
   updatedAt           DateTime @updatedAt
 
   @@index([bulan])
-  @@index([menu])
 }
 
 // ========================================

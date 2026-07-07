@@ -15,24 +15,16 @@ import {
 } from 'recharts';
 
 interface LaporanBulanan {
+  id: string;
   bulan: string;
-  items: Array<{
-    id: string;
-    menu: string;
-    qtyProduksi: number;
-    costPerPortion: number;
-    jumlahCost: number;
-    overhead: number;
-    gaji: number;        // ✅ PASTIKAN ADA
-    labaKotor: number;
-    profit: number;
-  }>;
-  totalQty: number;
-  totalCost: number;
-  totalOverhead: number;
-  totalGaji: number;     // ✅ PASTIKAN ADA
-  totalLabaKotor: number;
-  totalProfit: number;
+  bulanKey: string;
+  qtyProduksi: number;
+  costPerPortion: number;
+  jumlahCost: number;
+  overhead: number;
+  gaji: number;
+  labaKotor: number;
+  profit: number;
 }
 
 const formatRupiah = (angka: number) => {
@@ -74,29 +66,13 @@ export default function Beranda() {
   // Data untuk grafik
   const chartData = data.map((item) => ({
     bulan: item.bulan,
-    qty: item.totalQty,
-    labaKotor: item.totalLabaKotor,
-    profit: item.totalProfit,
-    cost: item.totalCost,
-    overhead: item.totalOverhead,
-    gaji: item.totalGaji, // ✅ TAMBAHKAN
+    qty: item.qtyProduksi,
+    labaKotor: item.labaKotor,
+    profit: item.profit,
+    cost: item.jumlahCost,
+    overhead: item.overhead,
+    gaji: item.gaji,
   }));
-
-  // Data untuk grafik per menu (stacked)
-  const menuChartData = data.map((item) => {
-    const menuData: any = { bulan: item.bulan };
-    item.items.forEach((menu) => {
-      menuData[menu.menu] = menu.qtyProduksi;
-    });
-    return menuData;
-  });
-
-  // Warna untuk menu
-  const menuColors: Record<string, string> = {
-    'Nasi Gudeg Campur': '#3B82F6',
-    'Ayam Bakar Bumbu Rujak': '#10B981',
-    'Ayam Bakar Bumbu Kecap': '#F59E0B',
-  };
 
   if (loading) {
     return (
@@ -137,12 +113,12 @@ export default function Beranda() {
   }
 
   // Total keseluruhan
-  const totalQty = data.reduce((sum, d) => sum + d.totalQty, 0);
-  const totalProfit = data.reduce((sum, d) => sum + d.totalProfit, 0);
-  const totalLabaKotor = data.reduce((sum, d) => sum + d.totalLabaKotor, 0);
-  const totalCost = data.reduce((sum, d) => sum + d.totalCost, 0);
-  const totalOverhead = data.reduce((sum, d) => sum + d.totalOverhead, 0);
-  const totalGaji = data.reduce((sum, d) => sum + (d.totalGaji || 0), 0);
+  const totalQty = data.reduce((sum, d) => sum + d.qtyProduksi, 0);
+  const totalProfit = data.reduce((sum, d) => sum + d.profit, 0);
+  const totalLabaKotor = data.reduce((sum, d) => sum + d.labaKotor, 0);
+  const totalCost = data.reduce((sum, d) => sum + d.jumlahCost, 0);
+  const totalOverhead = data.reduce((sum, d) => sum + d.overhead, 0);
+  const totalGaji = data.reduce((sum, d) => sum + d.gaji, 0);
 
   return (
     <div className="w-full max-w-7xl mx-auto">
@@ -163,7 +139,7 @@ export default function Beranda() {
         </div>
       </div>
 
-      {/* 5 Cards Summary - TAMBAH GAJI */}
+      {/* 5 Cards Summary */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
         <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-2xl p-4 text-white">
           <p className="text-sm opacity-80">Total Laba Kotor</p>
@@ -189,7 +165,7 @@ export default function Beranda() {
         </div>
       </div>
 
-      {/* Grafik 2: Laba Kotor vs Profit vs Cost vs Overhead vs Gaji */}
+      {/* Grafik: Laba Kotor vs Profit vs Cost vs Overhead vs Gaji */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6">
         <h3 className="text-sm font-semibold text-gray-700 mb-4">
           📊 Laba Kotor vs Profit vs Cost vs Overhead vs Gaji
@@ -210,43 +186,17 @@ export default function Beranda() {
         </ResponsiveContainer>
       </div>
 
-      {/* Grafik 3: Produksi per Menu (Stacked) */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-        <h3 className="text-sm font-semibold text-gray-700 mb-4">
-          📊 Produksi per Menu (Stacked)
-        </h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={menuChartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis dataKey="bulan" tick={{ fontSize: 10, fill: '#888' }} />
-            <YAxis tick={{ fontSize: 11, fill: '#888' }} />
-            <Tooltip />
-            <Legend />
-            {Object.keys(menuColors).map((menu) => (
-              <Bar
-                key={menu}
-                dataKey={menu}
-                stackId="stack"
-                fill={menuColors[menu]}
-                name={menu}
-              />
-            ))}
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Tabel Detail - TAMBAH KOLOM GAJI & OVERHEAD */}
+      {/* Tabel Detail */}
       <div className="mt-6 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-100">
-          <h3 className="text-sm font-semibold text-gray-700">📋 Detail Laporan vangga</h3>
+          <h3 className="text-sm font-semibold text-gray-700">📋 Detail Laporan Bulanan</h3>
         </div>
         <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase">Bulan</th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase">Menu</th>
-                <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 uppercase">Qty</th>
+                <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 uppercase">Qty Produksi</th>
                 <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 uppercase">Cost/Porsi</th>
                 <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 uppercase">Total Cost</th>
                 <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 uppercase">Overhead</th>
@@ -257,29 +207,22 @@ export default function Beranda() {
             </thead>
             <tbody>
               {data.map((item) => (
-                item.items.map((menu, idx) => (
-                  <tr key={`${item.bulan}-${menu.menu}`} className="border-b border-gray-50 hover:bg-gray-50/50">
-                    {idx === 0 && (
-                      <td className="px-3 py-2 font-medium text-gray-800" rowSpan={item.items.length}>
-                        {item.bulan}
-                      </td>
-                    )}
-                    <td className="px-3 py-2 text-gray-600">{menu.menu}</td>
-                    <td className="px-3 py-2 text-right text-gray-700">{menu.qtyProduksi.toLocaleString()}</td>
-                    <td className="px-3 py-2 text-right text-gray-600">{formatRupiah(menu.costPerPortion)}</td>
-                    <td className="px-3 py-2 text-right text-gray-700">{formatRupiah(menu.jumlahCost)}</td>
-                    <td className="px-3 py-2 text-right text-orange-600">{formatRupiah(menu.overhead)}</td>
-                    <td className="px-3 py-2 text-right text-pink-600">{formatRupiah(menu.gaji)}</td>
-                    <td className="px-3 py-2 text-right text-green-600">{formatRupiah(menu.labaKotor)}</td>
-                    <td className="px-3 py-2 text-right text-blue-600">{formatRupiah(menu.profit)}</td>
-                  </tr>
-                ))
+                <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                  <td className="px-3 py-2 font-medium text-gray-800">{item.bulan}</td>
+                  <td className="px-3 py-2 text-right text-gray-700">{item.qtyProduksi.toLocaleString()}</td>
+                  <td className="px-3 py-2 text-right text-gray-600">{formatRupiah(item.costPerPortion)}</td>
+                  <td className="px-3 py-2 text-right text-gray-700">{formatRupiah(item.jumlahCost)}</td>
+                  <td className="px-3 py-2 text-right text-orange-600">{formatRupiah(item.overhead)}</td>
+                  <td className="px-3 py-2 text-right text-pink-600">{formatRupiah(item.gaji)}</td>
+                  <td className="px-3 py-2 text-right text-green-600">{formatRupiah(item.labaKotor)}</td>
+                  <td className="px-3 py-2 text-right text-blue-600">{formatRupiah(item.profit)}</td>
+                </tr>
               ))}
             </tbody>
           </table>
         </div>
         <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 text-xs text-gray-400">
-          Total {data.length} bulan · {data.reduce((sum, d) => sum + d.items.length, 0)} data menu
+          Total {data.length} bulan
         </div>
       </div>
     </div>
