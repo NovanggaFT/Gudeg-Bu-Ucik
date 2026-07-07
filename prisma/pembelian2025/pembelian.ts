@@ -62,7 +62,7 @@ async function importPembelian() {
       }
 
       const tanggal = cols[0].trim();
-      const kategori = cols[1].trim();
+      // const kategori = cols[1].trim();
       const nama = cols[2].trim();
       const detail = cols[3].trim() || null;
       const qty = parseFloat(cols[4].trim()) || 0;
@@ -80,7 +80,6 @@ async function importPembelian() {
       await prisma.pembelian.create({
         data: {
           tanggal: tanggalObj,
-          kategori,
           nama,
           detail,
           qty,
@@ -97,15 +96,11 @@ async function importPembelian() {
   console.log(`📊 Total rows inserted: ${totalInserted}`);
   console.log(`📊 Total skipped: ${totalSkipped}`);
 
-  // Summary per kategori
   const summary = await prisma.$queryRaw`
     SELECT 
-      kategori,
       COUNT(*) as total_rows,
       SUM(total) as total_biaya
     FROM "Pembelian"
-    GROUP BY kategori
-    ORDER BY kategori
   `;
   console.log('\n📊 Summary per kategori:');
   console.table(summary);
