@@ -17,7 +17,7 @@ async function updateLaporanBulanan(tanggal: Date) {
     
     console.log(`📊 Updating laporan untuk ${bulanStr}`);
 
-    // Ambil semua penjualan di bulan tersebut
+    // ========== 1. Ambil data penjualan ==========
     const penjualans = await prisma.penjualan.findMany({
       where: {
         tanggal: {
@@ -25,32 +25,22 @@ async function updateLaporanBulanan(tanggal: Date) {
           lte: endDate,
         },
       },
-      include: {
-        produk: {
-          select: {
-            id: true,
-            nama: true,
-            hpp: true,
-            hargaJual: true,
-          },
-        },
-      },
     });
 
-    let totalPenjualanQty = 0;
+    let totalQty = 0;
+    let totalRevenue = 0;
     let totalHPP = 0;
-    let totalHargaJual = 0;
-    let totalProfit = 0;
+    let totalProfitPenjualan = 0;
 
     for (const p of penjualans) {
       const qty = Number(p.qty);
-      totalPenjualanQty += qty;
+      totalQty += qty;
+      totalRevenue += Number(p.hargaJual) * qty;
       totalHPP += Number(p.hpp) * qty;
-      totalHargaJual += Number(p.hargaJual) * qty;
-      totalProfit += Number(p.profit);
+      totalProfitPenjualan += Number(p.profit);
     }
 
-    // Ambil total pembelian bahan baku
+    // ========== 2. Ambil cost dari pembelian bahan baku ==========
     const pembelianBahan = await prisma.$queryRaw<{ total: number }[]>`
       SELECT COALESCE(SUM(total), 0) as total
       FROM "PembelianBahanBaku"
@@ -59,7 +49,7 @@ async function updateLaporanBulanan(tanggal: Date) {
 
     const totalPembelianBahan = Number(pembelianBahan[0]?.total) || 0;
 
-    // Ambil total pembelian reguler
+    // ========== 3. Ambil cost dari pembelian reguler ==========
     const pembelianReguler = await prisma.$queryRaw<{ total: number }[]>`
       SELECT COALESCE(SUM(total), 0) as total
       FROM "Pembelian"
@@ -68,7 +58,7 @@ async function updateLaporanBulanan(tanggal: Date) {
 
     const totalPembelianReguler = Number(pembelianReguler[0]?.total) || 0;
 
-    // Ambil total gaji
+    // ========== 4. Ambil gaji ==========
     const gajiData = await prisma.$queryRaw<{ total: number }[]>`
       SELECT COALESCE(SUM(gaji), 0) as total
       FROM "Penggajian"
@@ -77,8 +67,7 @@ async function updateLaporanBulanan(tanggal: Date) {
 
     const totalGaji = Number(gajiData[0]?.total) || 0;
 
-    // ✅ OVERHEAD: Ambil dari tabel LaporanBulanan yang sudah ada (tidak dihitung ulang)
-    // Atau dari Asset jika belum ada
+    // ========== 5. Ambil overhead ==========
     const existingLaporan = await prisma.laporanBulanan.findFirst({
       where: {
         bulan: {
@@ -87,14 +76,11 @@ async function updateLaporanBulanan(tanggal: Date) {
       },
     });
 
-    // Jika laporan sudah ada, gunakan overhead yang sudah disimpan
-    // Jika belum, ambil dari Asset (total perMonth / 12)
     let overhead = 0;
     
     if (existingLaporan) {
       overhead = existingLaporan.overhead;
     } else {
-      // Ambil dari Asset hanya jika belum ada laporan
       const overheadData = await prisma.$queryRaw<{ total: number }[]>`
         SELECT COALESCE(SUM("perMonth"), 0) as total
         FROM "Asset"
@@ -103,15 +89,30 @@ async function updateLaporanBulanan(tanggal: Date) {
       overhead = Number(overheadData[0]?.total) || 0;
     }
 
-    // Hitung
-    const totalCost = totalPembelianBahan + totalPembelianReguler;
-    const costPerPortion = totalPenjualanQty > 0 ? Math.round(totalCost / totalPenjualanQty) : 0;
-    const labaKotor = totalHargaJual - totalCost;
-    const profit = totalHargaJual - totalCost - totalGaji - overhead;
+    // ========== 6. Hitung dengan rumus yang benar ==========
+    // Laba Kotor = Revenue - HPP (dari penjualan)
+    const labaKotor = totalRevenue - totalHPP;
+    
+    // Profit = Revenue - Total Cost Produksi - Overhead - Gaji
+    const totalCostProduksi = totalPembelianBahan + totalPembelianReguler;
+    const profit = totalRevenue - totalCostProduksi - overhead - totalGaji;
+
+    const costPerPortion = totalQty > 0 ? Math.round(totalCostProduksi / totalQty) : 0;
 
     const bulanDate = new Date(year, month - 1, 1);
-    
-    // ✅ Update/ Create tanpa mengubah overhead
+
+    console.log(`📊 Laporan ${bulanStr}:`, {
+      totalQty,
+      totalRevenue,
+      totalHPP,
+      labaKotor,
+      totalCostProduksi,
+      profit,
+      overhead,
+      totalGaji,
+    });
+
+    // ========== 7. Save ==========
     const existing = await prisma.laporanBulanan.findFirst({
       where: {
         bulan: {
@@ -124,13 +125,12 @@ async function updateLaporanBulanan(tanggal: Date) {
       await prisma.laporanBulanan.update({
         where: { id: existing.id },
         data: {
-          qtyProduksi: totalPenjualanQty,
+          qtyProduksi: totalQty,
           costPerPortion: costPerPortion,
-          jumlahCost: totalCost,
+          jumlahCost: totalCostProduksi,
           gaji: totalGaji,
           labaKotor: labaKotor,
           profit: profit,
-          // ❌ overhead TIDAK diupdate
           updatedAt: new Date(),
         },
       });
@@ -138,10 +138,10 @@ async function updateLaporanBulanan(tanggal: Date) {
       await prisma.laporanBulanan.create({
         data: {
           bulan: bulanDate,
-          qtyProduksi: totalPenjualanQty,
+          qtyProduksi: totalQty,
           costPerPortion: costPerPortion,
-          jumlahCost: totalCost,
-          overhead: overhead, // Pakai dari Asset
+          jumlahCost: totalCostProduksi,
+          overhead: overhead,
           gaji: totalGaji,
           labaKotor: labaKotor,
           profit: profit,
@@ -149,7 +149,7 @@ async function updateLaporanBulanan(tanggal: Date) {
       });
     }
 
-    console.log(`✅ Laporan ${bulanStr} updated (overhead tetap: ${overhead})`);
+    console.log(`✅ Laporan ${bulanStr} updated`);
   } catch (error) {
     console.error('❌ Error updating laporan bulanan:', error);
     throw error;
