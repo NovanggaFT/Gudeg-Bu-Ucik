@@ -11,10 +11,10 @@ async function updateLaporanBulanan(tanggal: Date) {
     const year = tanggal.getFullYear();
     const month = tanggal.getMonth() + 1;
     const bulanStr = `${year}-${String(month).padStart(2, '0')}`;
-
+    
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0, 23, 59, 59);
-
+    
     console.log(`📊 Updating laporan untuk ${bulanStr}`);
 
     // Ambil semua penjualan di bulan tersebut
@@ -59,12 +59,11 @@ async function updateLaporanBulanan(tanggal: Date) {
 
     const totalPembelianBahan = Number(pembelianBahan[0]?.total) || 0;
 
-    // Ambil total pembelian reguler (overhead)
+    // Ambil total pembelian reguler
     const pembelianReguler = await prisma.$queryRaw<{ total: number }[]>`
       SELECT COALESCE(SUM(total), 0) as total
       FROM "Pembelian"
       WHERE DATE_TRUNC('month', "tanggal") = DATE_TRUNC('month', ${startDate}::timestamp)
-      AND (nama ILIKE '%gas%' OR nama ILIKE '%listrik%' OR nama ILIKE '%air%' OR nama ILIKE '%bahan bakar%')
     `;
 
     const totalPembelianReguler = Number(pembelianReguler[0]?.total) || 0;
@@ -78,25 +77,42 @@ async function updateLaporanBulanan(tanggal: Date) {
 
     const totalGaji = Number(gajiData[0]?.total) || 0;
 
-    // Ambil total overhead dari asset
-    const overheadData = await prisma.$queryRaw<{ total: number }[]>`
-      SELECT COALESCE(SUM("perMonth"), 0) as total
-      FROM "Asset"
-      WHERE status != 'Rusak'
-    `;
+    // ✅ OVERHEAD: Ambil dari tabel LaporanBulanan yang sudah ada (tidak dihitung ulang)
+    // Atau dari Asset jika belum ada
+    const existingLaporan = await prisma.laporanBulanan.findFirst({
+      where: {
+        bulan: {
+          equals: new Date(year, month - 1, 1),
+        },
+      },
+    });
 
-    const totalOverhead = Number(overheadData[0]?.total) || 0;
+    // Jika laporan sudah ada, gunakan overhead yang sudah disimpan
+    // Jika belum, ambil dari Asset (total perMonth / 12)
+    let overhead = 0;
+    
+    if (existingLaporan) {
+      overhead = existingLaporan.overhead;
+    } else {
+      // Ambil dari Asset hanya jika belum ada laporan
+      const overheadData = await prisma.$queryRaw<{ total: number }[]>`
+        SELECT COALESCE(SUM("perMonth"), 0) as total
+        FROM "Asset"
+        WHERE status != 'Rusak'
+      `;
+      overhead = Number(overheadData[0]?.total) || 0;
+    }
 
     // Hitung
     const totalCost = totalPembelianBahan + totalPembelianReguler;
     const costPerPortion = totalPenjualanQty > 0 ? Math.round(totalCost / totalPenjualanQty) : 0;
     const labaKotor = totalHargaJual - totalCost;
-    const profit = totalHargaJual - totalCost - totalGaji - totalOverhead;
+    const profit = totalHargaJual - totalCost - totalGaji - overhead;
 
     const bulanDate = new Date(year, month - 1, 1);
-
-    // ✅ Cek apakah laporan sudah ada
-    const existingLaporan = await prisma.laporanBulanan.findFirst({
+    
+    // ✅ Update/ Create tanpa mengubah overhead
+    const existing = await prisma.laporanBulanan.findFirst({
       where: {
         bulan: {
           equals: bulanDate,
@@ -104,30 +120,28 @@ async function updateLaporanBulanan(tanggal: Date) {
       },
     });
 
-    if (existingLaporan) {
-      // ✅ Update jika sudah ada
+    if (existing) {
       await prisma.laporanBulanan.update({
-        where: { id: existingLaporan.id },
+        where: { id: existing.id },
         data: {
           qtyProduksi: totalPenjualanQty,
           costPerPortion: costPerPortion,
           jumlahCost: totalCost,
-          overhead: totalOverhead,
           gaji: totalGaji,
           labaKotor: labaKotor,
           profit: profit,
+          // ❌ overhead TIDAK diupdate
           updatedAt: new Date(),
         },
       });
     } else {
-      // ✅ Create jika belum ada
       await prisma.laporanBulanan.create({
         data: {
           bulan: bulanDate,
           qtyProduksi: totalPenjualanQty,
           costPerPortion: costPerPortion,
           jumlahCost: totalCost,
-          overhead: totalOverhead,
+          overhead: overhead, // Pakai dari Asset
           gaji: totalGaji,
           labaKotor: labaKotor,
           profit: profit,
@@ -135,7 +149,7 @@ async function updateLaporanBulanan(tanggal: Date) {
       });
     }
 
-    console.log(`✅ Laporan ${bulanStr} updated`);
+    console.log(`✅ Laporan ${bulanStr} updated (overhead tetap: ${overhead})`);
   } catch (error) {
     console.error('❌ Error updating laporan bulanan:', error);
     throw error;
