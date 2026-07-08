@@ -2,7 +2,7 @@
 
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import Swal from 'sweetalert2';
 
 interface Produk {
@@ -12,6 +12,15 @@ interface Produk {
   hpp: number;
   hargaJual: number;
   stok: number;
+  bahanBaku?: {
+    bahanBaku: {
+      id: string;
+      nama: string;
+      satuan: string;
+      stok: number;
+    };
+    qty: number;
+  }[];
 }
 
 interface Penjualan {
@@ -23,6 +32,22 @@ interface Penjualan {
   hargaJual: number;
   hpp: number;
   profit: number;
+}
+
+interface StokInfo {
+  produk: {
+    stokTersedia: number;
+    cukup: boolean;
+  };
+  bahanBaku: {
+    nama: string;
+    satuan: string;
+    stokTersedia: number;
+    dibutuhkan: number;
+    cukup: boolean;
+    kekurangan?: number;
+  }[];
+  semuaCukup: boolean;
 }
 
 const formatRupiah = (angka: number) => {
@@ -46,13 +71,16 @@ export default function PenjualanPage() {
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+
   const [formData, setFormData] = useState({
     produkId: '',
     qty: '',
     tanggal: new Date().toISOString().split('T')[0],
     hargaJual: '',
   });
+
+  // ✅ State untuk info stok
+  const [stokInfo, setStokInfo] = useState<StokInfo | null>(null);
 
   // ✅ Ambil produk untuk dropdown
   const fetchProduk = async () => {
@@ -73,13 +101,13 @@ export default function PenjualanPage() {
       setLoading(true);
       setError(null);
       const res = await fetch('/api/penjualan');
-      
+
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       }
-      
+
       const result = await res.json();
-      
+
       if (result.status === '✅ Berhasil!') {
         setData(result.data);
         applyFilters(result.data, filterMonth, filterProduk);
@@ -121,16 +149,78 @@ export default function PenjualanPage() {
     applyFilters(data, month, produk);
   };
 
-  // ✅ Auto-fill harga jual saat produk dipilih
+  // ✅ Cek stok produk & bahan baku
+  const cekStok = (produkId: string, qty: number): StokInfo | null => {
+    const selected = produkList.find(p => p.id === produkId);
+    if (!selected) return null;
+
+    const stokProdukTersedia = selected.stok || 0;
+    const cukupProduk = stokProdukTersedia >= qty;
+
+    // Cek stok bahan baku
+    const bahanBakuInfo = selected.bahanBaku?.map(item => {
+      const stokTersedia = Number(item.bahanBaku.stok);
+      const dibutuhkan = item.qty * qty;
+      const cukup = stokTersedia >= dibutuhkan;
+
+      return {
+        nama: item.bahanBaku.nama,
+        satuan: item.bahanBaku.satuan,
+        stokTersedia,
+        dibutuhkan,
+        cukup,
+        kekurangan: cukup ? undefined : dibutuhkan - stokTersedia,
+      };
+    }) || [];
+
+    const semuaCukup = cukupProduk && bahanBakuInfo.every(b => b.cukup);
+
+    return {
+      produk: {
+        stokTersedia: stokProdukTersedia,
+        cukup: cukupProduk,
+      },
+      bahanBaku: bahanBakuInfo,
+      semuaCukup,
+    };
+  };
+
+  // ✅ Handle produk change
   const handleProdukChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const produkId = e.target.value;
-    setFormData({ ...formData, produkId, hargaJual: '' });
-    
+    setFormData({ ...formData, produkId, qty: '', hargaJual: '' });
+    setStokInfo(null);
+
     if (produkId) {
       const selected = produkList.find(p => p.id === produkId);
       if (selected) {
-        setFormData(prev => ({ ...prev, produkId, hargaJual: String(selected.hargaJual) }));
+        setFormData(prev => ({
+          ...prev,
+          produkId,
+          hargaJual: String(selected.hargaJual)
+        }));
+
+        // Cek stok dengan qty 0 dulu
+        const info = cekStok(produkId, 0);
+        if (info) setStokInfo(info);
       }
+    }
+  };
+
+  // ✅ Handle qty change
+  const handleQtyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const qty = e.target.value;
+    setFormData({ ...formData, qty });
+
+    if (formData.produkId && qty) {
+      const qtyNum = Number(qty);
+      if (qtyNum > 0) {
+        const info = cekStok(formData.produkId, qtyNum);
+        if (info) setStokInfo(info);
+      }
+    } else if (formData.produkId) {
+      const info = cekStok(formData.produkId, 0);
+      if (info) setStokInfo(info);
     }
   };
 
@@ -139,7 +229,7 @@ export default function PenjualanPage() {
   // ============================================
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.produkId || !formData.qty || !formData.tanggal) {
       Swal.fire({
         icon: 'warning',
@@ -170,9 +260,33 @@ export default function PenjualanPage() {
       return;
     }
 
+    // ✅ CEK STOK SEBELUM SUBMIT
+    if (stokInfo && !stokInfo.semuaCukup) {
+      let pesanError = 'Stok tidak mencukupi!\n\n';
+
+      if (!stokInfo.produk.cukup) {
+        pesanError += `❌ Stok produk: ${stokInfo.produk.stokTersedia}\n`;
+      }
+
+      const bahanKurang = stokInfo.bahanBaku.filter(b => !b.cukup);
+      if (bahanKurang.length > 0) {
+        pesanError += '\n❌ Bahan baku kurang:\n';
+        bahanKurang.forEach(b => {
+          pesanError += `  - ${b.nama}: stok ${b.stokTersedia} ${b.satuan}, butuh ${b.dibutuhkan} ${b.satuan} (kurang ${b.kekurangan})\n`;
+        });
+      }
+
+      Swal.fire({
+        icon: 'error',
+        title: '❌ Stok Tidak Cukup!',
+        text: pesanError,
+        confirmButtonText: 'OK',
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
-    // Cari produk untuk dapat HPP
     const selectedProduk = produkList.find(p => p.id === formData.produkId);
     const hpp = selectedProduk?.hpp || 0;
     const profit = (hargaJualNum - hpp) * qtyNum;
@@ -190,17 +304,25 @@ export default function PenjualanPage() {
           profit: profit,
         }),
       });
-      
+
       const result = await res.json();
-      
+
       if (result.status === '✅ Berhasil!') {
         setShowForm(false);
-        setFormData({ produkId: '', qty: '', tanggal: new Date().toISOString().split('T')[0], hargaJual: '' });
+        setFormData({
+          produkId: '',
+          qty: '',
+          tanggal: new Date().toISOString().split('T')[0],
+          hargaJual: ''
+        });
+        setStokInfo(null);
         await fetchData();
+        await fetchProduk();
+
         Swal.fire({
           icon: 'success',
           title: '✅ Berhasil!',
-          text: 'Penjualan berhasil ditambahkan',
+          text: result.message || 'Penjualan berhasil ditambahkan',
           timer: 1500,
           showConfirmButton: false,
         });
@@ -225,7 +347,7 @@ export default function PenjualanPage() {
   const handleDelete = async (id: string, nama: string) => {
     const result = await Swal.fire({
       title: `Hapus penjualan ${nama}?`,
-      text: "Data akan dihapus permanen!",
+      text: "Stok produk & bahan baku akan dikembalikan!",
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#d33',
@@ -238,15 +360,28 @@ export default function PenjualanPage() {
         const res = await fetch(`/api/penjualan/${id}`, {
           method: 'DELETE',
         });
-        
+
+        const data = await res.json();
+
         if (res.ok) {
           await fetchData();
-          Swal.fire({ icon: 'success', title: '✅ Berhasil!', timer: 1500, showConfirmButton: false });
+          await fetchProduk();
+          Swal.fire({
+            icon: 'success',
+            title: '✅ Berhasil!',
+            text: data.message || 'Data berhasil dihapus',
+            timer: 1500,
+            showConfirmButton: false
+          });
         } else {
-          throw new Error('Gagal menghapus');
+          throw new Error(data.error || 'Gagal menghapus');
         }
-      } catch (error) {
-        Swal.fire({ icon: 'error', title: 'Gagal!' });
+      } catch (error: any) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Gagal!',
+          text: error.message
+        });
       }
     }
   };
@@ -273,7 +408,7 @@ export default function PenjualanPage() {
       <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
         <div className="bg-white rounded-2xl shadow-sm border border-red-200 p-8 max-w-md text-center">
           <p className="text-red-500 text-lg">❌ {error}</p>
-          <button 
+          <button
             onClick={fetchData}
             className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
           >
@@ -293,7 +428,18 @@ export default function PenjualanPage() {
             <p className="text-sm text-gray-500">Kelola data penjualan harian</p>
           </div>
           <button
-            onClick={() => setShowForm(!showForm)}
+            onClick={() => {
+              setShowForm(!showForm);
+              if (!showForm) {
+                setStokInfo(null);
+                setFormData({
+                  produkId: '',
+                  qty: '',
+                  tanggal: new Date().toISOString().split('T')[0],
+                  hargaJual: ''
+                });
+              }
+            }}
             disabled={isSubmitting}
             className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2 disabled:opacity-50"
           >
@@ -310,7 +456,6 @@ export default function PenjualanPage() {
             <h3 className="text-sm font-semibold text-gray-700 mb-4">📝 Tambah Data Penjualan</h3>
             <form onSubmit={handleSubmit}>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                {/* ✅ Dropdown Produk */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Produk</label>
                   <select
@@ -322,7 +467,7 @@ export default function PenjualanPage() {
                     <option value="">Pilih Produk</option>
                     {produkList.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.nama} ({p.sku}) - {formatRupiah(p.hargaJual)}
+                        {p.nama} ({p.sku}) - Stok: {p.stok || 0} | {formatRupiah(p.hargaJual)}
                       </option>
                     ))}
                   </select>
@@ -334,16 +479,18 @@ export default function PenjualanPage() {
                     type="number"
                     placeholder="Jumlah"
                     value={formData.qty}
-                    onChange={(e) => setFormData({ ...formData, qty: e.target.value })}
+                    onChange={handleQtyChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
                     required
+                    min="1"
+                    step="1"
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Harga Jual
-                    <span className="text-xs text-gray-400 ml-1">(auto-fill dari produk)</span>
+                    <span className="text-xs text-gray-400 ml-1">(auto-fill)</span>
                   </label>
                   <input
                     type="number"
@@ -352,6 +499,8 @@ export default function PenjualanPage() {
                     onChange={(e) => setFormData({ ...formData, hargaJual: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
                     required
+                    min="1"
+                    step="1"
                   />
                 </div>
 
@@ -366,14 +515,86 @@ export default function PenjualanPage() {
                   />
                 </div>
               </div>
-              
+
+              {/* ✅ Info Stok */}
+              {stokInfo && formData.produkId && (
+                <div className="mt-3 space-y-2">
+                  {/* Stok Produk */}
+                  <div className={`p-3 rounded-lg text-sm border ${stokInfo.produk.cukup
+                      ? 'bg-green-50 border-green-200 text-green-700'
+                      : 'bg-red-50 border-red-200 text-red-700'
+                    }`}>
+                    <div className="flex items-center gap-2">
+                      <span>{stokInfo.produk.cukup ? '✅' : '❌'}</span>
+                      <span className="font-medium">Stok Produk:</span>
+                      <span>Tersedia <strong>{stokInfo.produk.stokTersedia}</strong></span>
+                      {stokInfo.produk.cukup && formData.qty && (
+                        <span>Sisa: <strong>{stokInfo.produk.stokTersedia - Number(formData.qty)}</strong></span>
+                      )}
+                      {!stokInfo.produk.cukup && (
+                        <span className="text-red-600 font-bold">
+                          (Kurang: {Number(formData.qty) - stokInfo.produk.stokTersedia})
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Stok Bahan Baku */}
+                  {stokInfo.bahanBaku.length > 0 && (
+                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                      <div className="bg-gray-50 px-3 py-2 text-xs font-medium text-gray-500">
+                        📦 Stok Bahan Baku
+                      </div>
+                      {stokInfo.bahanBaku.map((b, index) => (
+                        <div
+                          key={index}
+                          className={`px-3 py-2 text-sm border-t border-gray-100 flex flex-wrap items-center gap-2 ${b.cukup ? 'text-green-700' : 'text-red-700 bg-red-50'
+                            }`}
+                        >
+                          <span>{b.cukup ? '✅' : '❌'}</span>
+                          <span className="font-medium">{b.nama}</span>
+                          <span className="text-gray-500">
+                            Stok: {b.stokTersedia} {b.satuan}
+                          </span>
+                          <span className="text-gray-500">
+                            Butuh: {b.dibutuhkan} {b.satuan}
+                          </span>
+                          {!b.cukup && (
+                            <span className="text-red-600 font-bold">
+                              (Kurang: {b.kekurangan} {b.satuan})
+                            </span>
+                          )}
+                          {b.cukup && formData.qty && (
+                            <span className="text-green-600">
+                              Sisa: {b.stokTersedia - b.dibutuhkan} {b.satuan}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Status Total */}
+                  <div className={`p-2 rounded-lg text-center text-sm font-medium ${stokInfo.semuaCukup
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-red-100 text-red-700'
+                    }`}>
+                    {stokInfo.semuaCukup
+                      ? '✅ Semua stok mencukupi'
+                      : '❌ Stok tidak mencukupi'}
+                  </div>
+                </div>
+              )}
+
               {/* Preview */}
               {formData.produkId && formData.qty && formData.hargaJual && (
-                <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm text-gray-600">
+                <div className="mt-3 p-3 bg-blue-50 rounded-lg text-sm text-gray-600">
                   <span className="font-medium">Preview:</span>
-                  {(Number(formData.qty) * Number(formData.hargaJual)).toLocaleString()} × {formatRupiah(Number(formData.hargaJual))} = 
-                  <span className="font-bold text-blue-600 ml-1">
-                    {formatRupiah(Number(formData.qty) * Number(formData.hargaJual))}
+                  <span className="ml-2">
+                    {Number(formData.qty)} × {formatRupiah(Number(formData.hargaJual))} =
+                    <span className="font-bold text-blue-600 ml-1">
+                      {formatRupiah(Number(formData.qty) * Number(formData.hargaJual))}
+                    </span>
                   </span>
                 </div>
               )}
@@ -381,17 +602,23 @@ export default function PenjualanPage() {
               <div className="flex gap-3 mt-4">
                 <button
                   type="submit"
-                  disabled={isSubmitting}
-                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm transition-colors disabled:opacity-50"
+                  disabled={isSubmitting || (stokInfo ? !stokInfo.semuaCukup : false)}
+                  className={`px-4 py-2 rounded-lg text-sm transition-colors flex items-center gap-2 ${isSubmitting || (stokInfo ? !stokInfo.semuaCukup : false)
+                      ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                      : 'bg-blue-500 text-white hover:bg-blue-600'
+                    }`}
                 >
-                  {isSubmitting ? '⏳ Menyimpan...' : 'Simpan'}
+                  {isSubmitting ? '⏳ Menyimpan...' : '💾 Simpan'}
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowForm(false)}
+                  onClick={() => {
+                    setShowForm(false);
+                    setStokInfo(null);
+                  }}
                   className="px-4 py-2 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 text-sm"
                 >
-                  Batal
+                  ❌ Batal
                 </button>
               </div>
             </form>
@@ -401,14 +628,14 @@ export default function PenjualanPage() {
         {/* Filter */}
         <div className="flex flex-wrap items-center gap-4 mb-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <label className="text-sm text-gray-600 font-medium">📅 Filter:</label>
-          
+
           <input
             type="month"
             value={filterMonth}
             onChange={(e) => handleFilterChange(e.target.value, filterProduk)}
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 bg-white cursor-pointer min-w-[180px]"
           />
-          
+
           <select
             value={filterProduk}
             onChange={(e) => handleFilterChange(filterMonth, e.target.value)}
@@ -416,10 +643,12 @@ export default function PenjualanPage() {
           >
             <option value="all">📋 Semua Produk</option>
             {produkList.map((p) => (
-              <option key={p.id} value={p.id}>{p.nama}</option>
+              <option key={p.id} value={p.id}>
+                {p.nama} (Stok: {p.stok || 0})
+              </option>
             ))}
           </select>
-          
+
           <span className="text-xs text-gray-400 ml-auto">
             📊 {filteredData.length} data
           </span>
@@ -480,15 +709,19 @@ export default function PenjualanPage() {
                           year: 'numeric',
                         })}
                       </td>
-                      <td className="px-4 py-2 font-medium text-gray-900">{item.produk?.nama || '-'}</td>
+                      <td className="px-4 py-2">
+                        <span className="font-medium text-gray-900">{item.produk?.nama || '-'}</span>
+                        <span className="text-xs text-gray-400 ml-1">({item.produk?.sku})</span>
+                      </td>
                       <td className="px-4 py-2 text-right text-gray-700">{item.qty}</td>
                       <td className="px-4 py-2 text-right text-gray-600">{formatRupiah(item.hargaJual)}</td>
                       <td className="px-4 py-2 text-right text-gray-500">{formatRupiah(item.hpp)}</td>
-                      <td className="px-4 py-2 text-right text-green-600">{formatRupiah(item.profit)}</td>
+                      <td className="px-4 py-2 text-right text-green-600 font-medium">{formatRupiah(item.profit)}</td>
                       <td className="px-4 py-2 text-center">
                         <button
                           onClick={() => handleDelete(item.id, item.produk?.nama || '')}
                           className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Hapus (stok akan dikembalikan)"
                         >
                           🗑️
                         </button>
@@ -499,8 +732,9 @@ export default function PenjualanPage() {
               </tbody>
             </table>
           </div>
-          <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 text-xs text-gray-400">
-            Total {filteredData.length} data
+          <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 text-xs text-gray-400 flex justify-between">
+            <span>Total {filteredData.length} data</span>
+            <span>💰 Total Profit: {formatRupiah(totalProfit)}</span>
           </div>
         </div>
       </div>
