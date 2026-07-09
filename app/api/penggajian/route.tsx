@@ -3,7 +3,79 @@
 import { prisma } from '@/app/lib/prisma';
 import { NextResponse } from 'next/server';
 
+// ============================================
+// HELPER: Update Laporan Bulanan (HANYA gaji)
+// ============================================
+async function updateLaporanBulananGaji(tanggal: Date) {
+  try {
+    // ✅ Ambil tahun & bulan dari tanggal (UTC)
+    const year = tanggal.getUTCFullYear();
+    const month = tanggal.getUTCMonth() + 1;
+    const bulanStr = `${year}-${String(month).padStart(2, '0')}`;
+    
+    // ✅ Buat tanggal bulan dalam UTC
+    const bulanDate = new Date(Date.UTC(year, month - 1, 1));
+    
+    console.log(`📊 Updating gaji untuk ${bulanStr}`);
+
+    // ========== 1. Ambil total gaji di bulan tersebut ==========
+    const gajiData = await prisma.$queryRaw<{ total: number }[]>`
+      SELECT COALESCE(SUM(gaji), 0) as total
+      FROM "Penggajian"
+      WHERE DATE_TRUNC('month', "tanggal_penggajian") = DATE_TRUNC('month', ${bulanDate}::timestamp)
+    `;
+
+    const totalGaji = Number(gajiData[0]?.total) || 0;
+
+    // ========== 2. Cari laporan bulan tersebut ==========
+    const existing = await prisma.laporanBulanan.findFirst({
+      where: {
+        bulan: {
+          equals: bulanDate,
+        },
+      },
+    });
+
+    if (existing) {
+      // ✅ UPDATE: HANYA gaji
+      // ❌ Kolom lain (qtyProduksi, jumlahCost, labaKotor, overhead, profit) TIDAK diubah
+      await prisma.laporanBulanan.update({
+        where: { id: existing.id },
+        data: {
+          gaji: totalGaji,
+          updatedAt: new Date(),
+        },
+      });
+      
+      console.log(`✅ Laporan ${bulanStr} diupdate (gaji = ${totalGaji})`);
+    } else {
+      // Buat laporan baru dengan data minimal (gaji saja)
+      await prisma.laporanBulanan.create({
+        data: {
+          bulan: bulanDate,
+          qtyProduksi: 0,
+          costPerPortion: 0,
+          jumlahCost: 0,
+          overhead: 0,
+          gaji: totalGaji,
+          labaKotor: 0,
+          profit: 0,
+        },
+      });
+      
+      console.log(`✅ Laporan ${bulanStr} dibuat (gaji = ${totalGaji})`);
+    }
+
+    return { success: true, totalGaji };
+  } catch (error) {
+    console.error('❌ Error updating laporan bulanan gaji:', error);
+    throw error;
+  }
+}
+
+// ============================================
 // GET: Ambil semua data penggajian
+// ============================================
 export async function GET() {
   try {
     const data = await prisma.penggajian.findMany({
@@ -27,7 +99,9 @@ export async function GET() {
   }
 }
 
+// ============================================
 // POST: Tambah data penggajian
+// ============================================
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -43,18 +117,26 @@ export async function POST(request: Request) {
       );
     }
 
+    // ✅ Buat tanggal dalam UTC
+    const tanggalObj = new Date(tanggalPenggajian);
+
+    // ✅ Create penggajian
     const data = await prisma.penggajian.create({
       data: {
         nama,
         posisi,
         gaji: Number(gaji),
-        tanggal_penggajian: new Date(tanggalPenggajian),
+        tanggal_penggajian: tanggalObj,
       },
     });
+
+    // ✅ UPDATE LAPORAN BULANAN (HANYA gaji)
+    await updateLaporanBulananGaji(tanggalObj);
 
     return NextResponse.json({
       status: '✅ Berhasil!',
       data,
+      message: 'Penggajian berhasil ditambahkan, laporan bulanan diupdate',
     });
   } catch (error: any) {
     console.error('Error creating penggajian:', error);
@@ -68,7 +150,9 @@ export async function POST(request: Request) {
   }
 }
 
+// ============================================
 // DELETE: Hapus data penggajian
+// ============================================
 export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -84,13 +168,34 @@ export async function DELETE(request: Request) {
       );
     }
 
+    // ✅ Cari data penggajian yang akan dihapus (untuk dapat tanggal)
+    const penggajian = await prisma.penggajian.findUnique({
+      where: { id },
+    });
+
+    if (!penggajian) {
+      return NextResponse.json(
+        {
+          status: '❌ GAGAL',
+          error: 'Data tidak ditemukan',
+        },
+        { status: 404 }
+      );
+    }
+
+    const tanggalObj = penggajian.tanggal_penggajian;
+
+    // ✅ Delete penggajian
     await prisma.penggajian.delete({
       where: { id },
     });
 
+    // ✅ UPDATE LAPORAN BULANAN (HANYA gaji)
+    await updateLaporanBulananGaji(tanggalObj);
+
     return NextResponse.json({
       status: '✅ Berhasil!',
-      message: 'Data berhasil dihapus',
+      message: 'Data berhasil dihapus, laporan bulanan diupdate',
     });
   } catch (error: any) {
     console.error('Error deleting penggajian:', error);
