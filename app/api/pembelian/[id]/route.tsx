@@ -141,9 +141,18 @@ export async function DELETE(
   context: any
 ) {
   try {
-    const { id } = context.params;
+    // ✅ Ambil id dari URL langsung (paling aman)
+    const url = new URL(request.url);
+    const pathParts = url.pathname.split('/');
+    const id = pathParts[pathParts.length - 1]; // Ambil bagian terakhir dari path
+
+    console.log('🔍 ====== DELETE CALLED ======');
+    console.log('🔍 URL:', request.url);
+    console.log('🔍 Path parts:', pathParts);
+    console.log('🔍 Extracted ID:', id);
 
     if (!id) {
+      console.log('❌ ID tidak ditemukan!');
       return NextResponse.json({
         status: '❌ GAGAL',
         error: 'ID wajib diisi',
@@ -154,13 +163,18 @@ export async function DELETE(
     const { searchParams } = new URL(request.url);
     const source = searchParams.get('source');
 
+    console.log(`🔍 Source: ${source}`);
     console.log(`🗑️ DELETE pembelian ID: ${id}, Source: ${source}`);
 
     // ========== Jika Bahan Baku ==========
     if (source === 'bahan_baku') {
+      console.log('🔍 Mencari data di PembelianBahanBaku...');
+      
       const pembelianBahan = await prisma.$queryRaw<any[]>`
         SELECT * FROM "PembelianBahanBaku" WHERE id = ${id}
       `;
+
+      console.log('🔍 Data ditemukan:', pembelianBahan);
 
       if (!pembelianBahan || pembelianBahan.length === 0) {
         return NextResponse.json({
@@ -173,12 +187,10 @@ export async function DELETE(
       const tanggalObj = item.tanggal;
 
       await prisma.$transaction(async (tx) => {
-        // 1. Delete dari PembelianBahanBaku
         await tx.$executeRaw`
           DELETE FROM "PembelianBahanBaku" WHERE id = ${id}
         `;
 
-        // 2. Restore stok bahan baku
         const bahanBaku = await tx.$queryRaw<any[]>`
           SELECT * FROM "BahanBaku" WHERE id = ${item.bahanBakuId}
         `;
@@ -199,6 +211,7 @@ export async function DELETE(
       await updateStokProdukDariBahanBaku();
       await updateLaporanBulananCost(tanggalObj);
 
+      console.log('✅ DELETE bahan baku berhasil!');
       return NextResponse.json({
         status: '✅ Berhasil!',
         message: 'Data bahan baku berhasil dihapus, stok produk & laporan diupdate',
@@ -207,9 +220,13 @@ export async function DELETE(
 
     // ========== Jika Reguler ==========
     if (source === 'reguler') {
+      console.log('🔍 Mencari data di Pembelian (Reguler)...');
+      
       const pembelianReguler = await prisma.$queryRaw<any[]>`
         SELECT * FROM "Pembelian" WHERE id = ${id}
       `;
+
+      console.log('🔍 Data ditemukan:', pembelianReguler);
 
       if (!pembelianReguler || pembelianReguler.length === 0) {
         return NextResponse.json({
@@ -221,14 +238,13 @@ export async function DELETE(
       const item = pembelianReguler[0];
       const tanggalObj = item.tanggal;
 
-      // ✅ Delete dari Pembelian (Reguler)
       await prisma.$executeRaw`
         DELETE FROM "Pembelian" WHERE id = ${id}
       `;
 
-      // ✅ Update laporan bulanan (HANYA jumlahCost)
       await updateLaporanBulananCost(tanggalObj);
 
+      console.log('✅ DELETE reguler berhasil!');
       return NextResponse.json({
         status: '✅ Berhasil!',
         message: 'Data reguler berhasil dihapus, laporan diupdate',
@@ -236,6 +252,7 @@ export async function DELETE(
     }
 
     // ========== Jika source tidak valid ==========
+    console.log('❌ Source tidak valid:', source);
     return NextResponse.json({
       status: '❌ GAGAL',
       error: 'Parameter source tidak valid (harus "bahan_baku" atau "reguler")',
