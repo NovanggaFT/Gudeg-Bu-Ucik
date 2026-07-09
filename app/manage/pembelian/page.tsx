@@ -230,9 +230,6 @@ export default function PembelianPage() {
         await fetchData();
         await fetchBahan();
 
-        // Update Laporan Bulanan
-        await updateLaporanBulanan(formData.tanggal);
-
         Swal.fire({
           icon: 'success',
           title: '✅ Berhasil!',
@@ -261,55 +258,47 @@ export default function PembelianPage() {
     }
   };
 
-  // Update Laporan Bulanan
-  const updateLaporanBulanan = async (tanggal: string) => {
-    try {
-      const bulan = new Date(tanggal);
-      const bulanStr = `${bulan.getFullYear()}-${String(bulan.getMonth() + 1).padStart(2, '0')}`;
-
-      const res = await fetch('/api/laporan-bulanan/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bulan: bulanStr }),
-      });
-
-      const result = await res.json();
-      console.log('📊 Laporan Bulanan updated:', result);
-    } catch (error) {
-      console.error('❌ Error updating laporan bulanan:', error);
-    }
-  };
-
   const handleDelete = async (id: string, nama: string, source: string, tanggal: string) => {
-    const result = await Swal.fire({
-      title: `Hapus ${nama}?`,
-      text: "Data akan dihapus permanen!",
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: '#d33',
-      confirmButtonText: 'Ya, hapus!',
-      cancelButtonText: 'Batal'
-    });
+  const result = await Swal.fire({
+    title: `Hapus ${nama}?`,
+    text: "Data akan dihapus permanen!",
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#d33',
+    confirmButtonText: 'Ya, hapus!',
+    cancelButtonText: 'Batal'
+  });
 
-    if (result.isConfirmed) {
-      try {
-        const res = await fetch(`/api/pembelian/${id}`, { method: 'DELETE' });
-        if (res.ok) {
-          await fetchData();
-          await fetchBahan();
+  if (result.isConfirmed) {
+    try {
+      // ✅ Kirim source sebagai query parameter
+      const res = await fetch(`/api/pembelian/${id}?source=${source}`, { 
+        method: 'DELETE' 
+      });
+      
+      if (res.ok) {
+        await fetchData();
+        await fetchBahan();
 
-          // Update Laporan Bulanan
-          await updateLaporanBulanan(tanggal);
-
-          Swal.fire({ icon: 'success', title: '✅ Berhasil!', timer: 1500, showConfirmButton: false });
-        } else {
-          throw new Error('Gagal menghapus');
-        }
-      } catch (error) {
-        Swal.fire({ icon: 'error', title: 'Gagal!' });
+        Swal.fire({ 
+          icon: 'success', 
+          title: '✅ Berhasil!', 
+          timer: 1500, 
+          showConfirmButton: false 
+        });
+      } else {
+        const error = await res.json();
+        throw new Error(error.error || 'Gagal menghapus');
       }
+    } catch (error: any) {
+      Swal.fire({ 
+        icon: 'error', 
+        title: 'Gagal!', 
+        text: error.message 
+      });
     }
-  };
+  }
+};
 
   // Statistik
   const totalQty = filteredData.reduce((sum, item) => sum + (item.qty || 0), 0);
@@ -356,12 +345,12 @@ export default function PembelianPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            <button
+            {/* <button
               onClick={fetchData}
               className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center gap-2"
             >
               🔄 Refresh
-            </button>
+            </button> */}
             <button
               onClick={() => setShowForm(!showForm)}
               disabled={isSubmitting}
@@ -485,7 +474,7 @@ export default function PembelianPage() {
 
                 {/* Detail */}
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Detail (opsional)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Keterangan</label>
                   <input
                     type="text"
                     placeholder="Detail tambahan..."

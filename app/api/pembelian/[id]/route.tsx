@@ -4,6 +4,78 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/app/lib/prisma';
 
 // ============================================
+// HELPER: Update Laporan Bulanan (HANYA jumlahCost)
+// ============================================
+async function updateLaporanBulananCost(tanggal: Date) {
+  try {
+    const year = tanggal.getUTCFullYear();
+    const month = tanggal.getUTCMonth() + 1;
+    const bulanStr = `${year}-${String(month).padStart(2, '0')}`;
+    const bulanDate = new Date(Date.UTC(year, month - 1, 1));
+    
+    console.log(`📊 Updating jumlahCost untuk ${bulanStr}`);
+
+    const pembelianBahan = await prisma.$queryRaw<{ total: number }[]>`
+      SELECT COALESCE(SUM(total), 0) as total
+      FROM "PembelianBahanBaku"
+      WHERE DATE_TRUNC('month', "tanggal") = DATE_TRUNC('month', ${bulanDate}::timestamp)
+    `;
+
+    const totalPembelianBahan = Number(pembelianBahan[0]?.total) || 0;
+
+    const pembelianReguler = await prisma.$queryRaw<{ total: number }[]>`
+      SELECT COALESCE(SUM(total), 0) as total
+      FROM "Pembelian"
+      WHERE DATE_TRUNC('month', "tanggal") = DATE_TRUNC('month', ${bulanDate}::timestamp)
+    `;
+
+    const totalPembelianReguler = Number(pembelianReguler[0]?.total) || 0;
+
+    const totalCost = totalPembelianBahan + totalPembelianReguler;
+    const costPerPortion = totalCost > 0 ? Math.round(totalCost / 1) : 0;
+
+    const existing = await prisma.laporanBulanan.findFirst({
+      where: {
+        bulan: {
+          equals: bulanDate,
+        },
+      },
+    });
+
+    if (existing) {
+      await prisma.laporanBulanan.update({
+        where: { id: existing.id },
+        data: {
+          jumlahCost: totalCost,
+          costPerPortion: costPerPortion,
+          updatedAt: new Date(),
+        },
+      });
+      console.log(`✅ Laporan ${bulanStr} diupdate (jumlahCost = ${totalCost})`);
+    } else {
+      await prisma.laporanBulanan.create({
+        data: {
+          bulan: bulanDate,
+          qtyProduksi: 0,
+          costPerPortion: costPerPortion,
+          jumlahCost: totalCost,
+          overhead: 0,
+          gaji: 0,
+          labaKotor: 0,
+          profit: 0,
+        },
+      });
+      console.log(`✅ Laporan ${bulanStr} dibuat (jumlahCost = ${totalCost})`);
+    }
+
+    return { success: true, totalCost };
+  } catch (error) {
+    console.error('❌ Error updating laporan bulanan cost:', error);
+    throw error;
+  }
+}
+
+// ============================================
 // HELPER: Update Stok Produk dari Bahan Baku
 // ============================================
 async function updateStokProdukDariBahanBaku() {
@@ -62,7 +134,7 @@ async function updateStokProdukDariBahanBaku() {
 }
 
 // ============================================
-// DELETE
+// DELETE: Hapus pembelian (Bahan Baku atau Reguler)
 // ============================================
 export async function DELETE(
   request: NextRequest,
@@ -78,52 +150,96 @@ export async function DELETE(
       }, { status: 400 });
     }
 
-    // Cari data pembelian
-    const pembelian = await prisma.$queryRaw<any[]>`
-      SELECT * FROM "PembelianBahanBaku" WHERE id = ${id}
-    `;
+    // ✅ Ambil source dari query parameter
+    const { searchParams } = new URL(request.url);
+    const source = searchParams.get('source');
 
-    if (!pembelian || pembelian.length === 0) {
+    console.log(`🗑️ DELETE pembelian ID: ${id}, Source: ${source}`);
+
+    // ========== Jika Bahan Baku ==========
+    if (source === 'bahan_baku') {
+      const pembelianBahan = await prisma.$queryRaw<any[]>`
+        SELECT * FROM "PembelianBahanBaku" WHERE id = ${id}
+      `;
+
+      if (!pembelianBahan || pembelianBahan.length === 0) {
+        return NextResponse.json({
+          status: '❌ GAGAL',
+          error: 'Data bahan baku tidak ditemukan',
+        }, { status: 404 });
+      }
+
+      const item = pembelianBahan[0];
+      const tanggalObj = item.tanggal;
+
+      await prisma.$transaction(async (tx) => {
+        // 1. Delete dari PembelianBahanBaku
+        await tx.$executeRaw`
+          DELETE FROM "PembelianBahanBaku" WHERE id = ${id}
+        `;
+
+        // 2. Restore stok bahan baku
+        const bahanBaku = await tx.$queryRaw<any[]>`
+          SELECT * FROM "BahanBaku" WHERE id = ${item.bahanBakuId}
+        `;
+
+        if (bahanBaku && bahanBaku.length > 0) {
+          const bb = bahanBaku[0];
+          const stokSaatIni = Number(bb.stok);
+          const stokBaru = stokSaatIni - Number(item.qty);
+          
+          await tx.$executeRaw`
+            UPDATE "BahanBaku" 
+            SET stok = ${stokBaru}
+            WHERE id = ${item.bahanBakuId}
+          `;
+        }
+      });
+
+      await updateStokProdukDariBahanBaku();
+      await updateLaporanBulananCost(tanggalObj);
+
       return NextResponse.json({
-        status: '❌ GAGAL',
-        error: 'Data tidak ditemukan',
-      }, { status: 404 });
+        status: '✅ Berhasil!',
+        message: 'Data bahan baku berhasil dihapus',
+      });
     }
 
-    const item = pembelian[0];
-
-    // TRANSACTION
-    await prisma.$transaction(async (tx) => {
-      // 1. Delete
-      await tx.$executeRaw`
-        DELETE FROM "PembelianBahanBaku" WHERE id = ${id}
+    // ========== Jika Reguler ==========
+    if (source === 'reguler') {
+      const pembelianReguler = await prisma.$queryRaw<any[]>`
+        SELECT * FROM "Pembelian" WHERE id = ${id}
       `;
 
-      // 2. Restore stok bahan baku
-      const bahanBaku = await tx.$queryRaw<any[]>`
-        SELECT * FROM "BahanBaku" WHERE id = ${item.bahanBakuId}
-      `;
-
-      if (bahanBaku && bahanBaku.length > 0) {
-        const bb = bahanBaku[0];
-        const stokSaatIni = Number(bb.stok);
-        const stokBaru = stokSaatIni - Number(item.qty);
-        
-        await tx.$executeRaw`
-          UPDATE "BahanBaku" 
-          SET stok = ${stokBaru}
-          WHERE id = ${item.bahanBakuId}
-        `;
+      if (!pembelianReguler || pembelianReguler.length === 0) {
+        return NextResponse.json({
+          status: '❌ GAGAL',
+          error: 'Data reguler tidak ditemukan',
+        }, { status: 404 });
       }
-    });
 
-    // Update stok produk
-    await updateStokProdukDariBahanBaku();
+      const item = pembelianReguler[0];
+      const tanggalObj = item.tanggal;
 
+      // Delete dari Pembelian (Reguler)
+      await prisma.$executeRaw`
+        DELETE FROM "Pembelian" WHERE id = ${id}
+      `;
+
+      await updateLaporanBulananCost(tanggalObj);
+
+      return NextResponse.json({
+        status: '✅ Berhasil!',
+        message: 'Data reguler berhasil dihapus',
+      });
+    }
+
+    // ========== Jika source tidak valid ==========
     return NextResponse.json({
-      status: '✅ Berhasil!',
-      message: 'Data berhasil dihapus, stok produk diupdate',
-    });
+      status: '❌ GAGAL',
+      error: 'Parameter source tidak valid (harus "bahan_baku" atau "reguler")',
+    }, { status: 400 });
+
   } catch (error: any) {
     console.error('❌ Error deleting pembelian:', error);
     return NextResponse.json({
