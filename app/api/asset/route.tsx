@@ -341,7 +341,7 @@ export async function PATCH(request: NextRequest) {
       }
 
       const overheadNum = Number(overhead) || 0;
-      const newProfit = existing.labaKotor - existing.gaji - overheadNum;
+      const newProfit = existing.labaKotor - existing.jumlahCost - existing.gaji - overheadNum;
 
       const updated = await prisma.laporanBulanan.update({
         where: { id: existing.id },
