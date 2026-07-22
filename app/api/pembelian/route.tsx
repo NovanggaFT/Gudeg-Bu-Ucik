@@ -100,13 +100,13 @@ async function recalculateStokBahanBaku() {
       const stokBaru = Math.max(0, totalPembelian - totalPenggunaan);
 
       // Harga rata-rata = total biaya / total pembelian (jika ada)
-      const hargaRataRata = totalPembelian > 0 
-        ? Math.round(totalBiayaPembelian / totalPembelian) 
+      const hargaRataRata = totalPembelian > 0
+        ? Math.round(totalBiayaPembelian / totalPembelian)
         : 0;
 
       await prisma.bahanBaku.update({
         where: { id: bahan.id },
-        data: { 
+        data: {
           stok: stokBaru,
           harga: hargaRataRata, // ✅ Update harga rata-rata
         },
@@ -396,18 +396,32 @@ export async function POST(request: Request) {
               NOW()
             )
           `;
+
+          // ✅ UPDATE STOK LANGSUNG (bukan recalculate)
+          const stokLama = Number(item.stok) || 0;
+          const stokBaru = stokLama + qtyNum;
+
+          // Hitung harga rata-rata baru
+          const totalBiayaLama = stokLama * Number(item.harga);
+          const totalBiayaBaru = totalBiayaLama + hargaTotalNum;
+          const hargaRataRata = stokBaru > 0 ? Math.round(totalBiayaBaru / stokBaru) : 0;
+
+          await tx.bahanBaku.update({
+            where: { id: bahanBakuId },
+            data: {
+              stok: stokBaru,
+              harga: hargaRataRata,
+            },
+          });
         });
 
-        // ✅ 1. Recalculate stok bahan baku & harga rata-rata
-        await recalculateStokBahanBaku();
-
-        // ✅ 2. Update HPP semua produk
+        // ✅ Update HPP semua produk
         await updateAllHPP();
 
-        // ✅ 3. Recalculate stok produk
+        // ✅ Recalculate stok produk
         await recalculateStokProduk();
 
-        // ✅ 4. Update laporan
+        // ✅ Update laporan
         await updateLaporanBulananCost(tanggalObj);
 
         return NextResponse.json({

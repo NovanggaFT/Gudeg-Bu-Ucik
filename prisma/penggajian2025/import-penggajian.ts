@@ -48,8 +48,7 @@ async function importCSV() {
       const tanggalStr = cols[3].trim();
       const [year, month, day] = tanggalStr.split('-').map(Number);
       
-      // ✅ Set waktu 00:00 WIB (UTC+7)
-      const tanggal = new Date(Date.UTC(year, month - 1, day, 17, 0, 0));
+      const tanggal = new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
 
       batch.push({
         nama,
